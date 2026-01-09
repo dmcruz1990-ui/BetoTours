@@ -1,3 +1,4 @@
+
 import { Tour } from '../types';
 
 export const TOURS: Tour[] = [
@@ -152,7 +153,7 @@ export const TOURS: Tour[] = [
     title: 'Coffee Tour Experience',
     titleEn: 'Coffee Tour Experience',
     price: '$189.000',
-    image: 'https://i.ibb.co/5hsjBhd1/Whats-App-Image-2026-01-09-at-1-19-05-PM-3.jpg',
+    image: 'https://i.ibb.co/S7ZBsjCX/1111.jpg',
     description: '¡Viví la cultura cafetera como un verdadero arriero! Si sos amante del tinto, este plan es pa\' vos.',
     descriptionEn: 'Live the coffee culture like a true "arriero"! If you love coffee, this is for you.',
     highlights: [
