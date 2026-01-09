@@ -1,0 +1,7 @@
+{
+  "name": "Beto Tours Medellín",
+  "description": "Una plataforma vibrante para reservar los mejores tours en Medellín y Antioquia, con el sabor auténtico de la cultura Paisa.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
