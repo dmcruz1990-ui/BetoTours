@@ -12,6 +12,7 @@ interface Participant {
   fullName: string;
   docType: string;
   docNumber: string;
+  age: string;
 }
 
 const App: React.FC = () => {
@@ -22,11 +23,13 @@ const App: React.FC = () => {
   
   // Estado para la reserva
   const [numPeople, setNumPeople] = useState<number>(1);
-  const [participants, setParticipants] = useState<Participant[]>([{ fullName: '', docType: 'CC', docNumber: '' }]);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [participants, setParticipants] = useState<Participant[]>([{ fullName: '', docType: 'CC', docNumber: '', age: '' }]);
 
   useEffect(() => {
     setNumPeople(1);
-    setParticipants([{ fullName: '', docType: 'CC', docNumber: '' }]);
+    setSelectedDate('');
+    setParticipants([{ fullName: '', docType: 'CC', docNumber: '', age: '' }]);
     setCurrentImageIndex(0);
   }, [selectedTour]);
 
@@ -36,7 +39,7 @@ const App: React.FC = () => {
     const newParticipants = [...participants];
     if (n > participants.length) {
       for (let i = participants.length; i < n; i++) {
-        newParticipants.push({ fullName: '', docType: 'CC', docNumber: '' });
+        newParticipants.push({ fullName: '', docType: 'CC', docNumber: '', age: '' });
       }
     } else {
       newParticipants.splice(n);
@@ -63,20 +66,25 @@ const App: React.FC = () => {
   };
 
   const handleBooking = (tour: Tour) => {
-    const incomplete = participants.some(p => !p.fullName.trim() || !p.docNumber.trim());
+    if (!selectedDate) {
+      alert(language === 'es' ? "¡Eh ave maría! Por favor elija una fecha para el tour." : "Oh boy! Please choose a date for the tour.");
+      return;
+    }
+
+    const incomplete = participants.some(p => !p.fullName.trim() || !p.docNumber.trim() || !p.age.trim());
     if (incomplete) {
-      alert(language === 'es' ? "¡Eh ave maría! Por favor llene los datos de todos los parceros." : "Oh boy! Please fill in the details for everyone.");
+      alert(language === 'es' ? "¡Parce! Por favor llene todos los datos (nombre, documento y edad) de los viajeros." : "Buddy! Please fill in all details (name, ID, and age) for all travelers.");
       return;
     }
 
     let passengersText = participants.map((p, i) => 
-      `Persona ${i + 1}: ${p.fullName} - ${p.docType}: ${p.docNumber}`
+      `👉 *Viajero ${i + 1}:* ${p.fullName} (${p.age} años) - ${p.docType}: ${p.docNumber}`
     ).join('\n');
 
     const tourTitle = language === 'es' ? tour.title : tour.titleEn;
     const message = language === 'es' 
-      ? `¡Hola Beto! 👋\n\nMe interesa el tour: *${tourTitle}*.\n\nSomos *${numPeople}* persona(s):\n${passengersText}\n\n¿Tienen disponibilidad?`
-      : `Hi Beto! 👋\n\nI'm interested in: *${tourTitle}*.\n\nWe are *${numPeople}* person(s):\n${passengersText}\n\nAvailability?`;
+      ? `¡Hola Beto! 👋\n\nMe interesa el tour: *${tourTitle}*\n📅 Fecha: *${selectedDate}*\n👥 Personas: *${numPeople}*\n\n*Datos de los viajeros:*\n${passengersText}\n\n¿Tienen disponibilidad?`
+      : `Hi Beto! 👋\n\nI'm interested in: *${tourTitle}*\n📅 Date: *${selectedDate}*\n👥 People: *${numPeople}*\n\n*Traveler details:*\n${passengersText}\n\nAvailability?`;
     
     window.open(`https://wa.me/573332482626?text=${encodeURIComponent(message)}`, '_blank');
   };
@@ -103,8 +111,11 @@ const App: React.FC = () => {
     contactBtn: language === 'es' ? 'WhatsApp Directo' : 'Direct WhatsApp',
     reserveBtn: language === 'es' ? 'Reservar ahora' : 'Book now',
     howMany: language === 'es' ? '¿Cuántos vienen?' : 'How many are coming?',
+    travelDate: language === 'es' ? 'Fecha del tour' : 'Tour Date',
     fullName: language === 'es' ? 'Nombre completo' : 'Full Name',
     docNum: language === 'es' ? 'Documento' : 'ID Number',
+    age: language === 'es' ? 'Edad' : 'Age',
+    docType: language === 'es' ? 'Tipo de Doc.' : 'ID Type',
     perPerson: language === 'es' ? 'por persona' : 'per person',
     highlightsLabel: language === 'es' ? '¡Lo que te espera!' : 'What awaits you!',
     includesLabel: language === 'es' ? '¿Qué incluye?' : 'Includes',
@@ -243,6 +254,22 @@ const App: React.FC = () => {
 
               <div className="bg-green-50 p-6 rounded-2xl border border-green-100 shadow-inner">
                 <h4 className="font-bold mb-6 text-center text-green-800 uppercase tracking-wider">{translations.modalReserveTitle}</h4>
+                
+                {/* Selector de Fecha */}
+                <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-green-100">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <i className="fa-solid fa-calendar-days mr-2 text-green-600"></i>
+                    {translations.travelDate}
+                  </label>
+                  <input 
+                    type="date" 
+                    value={selectedDate}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full p-2 border-2 border-green-50 rounded-lg focus:border-green-500 focus:outline-none transition-all text-sm"
+                  />
+                </div>
+
                 <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-sm border border-green-100">
                   <span className="font-bold text-gray-700">{translations.howMany}</span>
                   <div className="flex items-center space-x-4">
@@ -262,23 +289,55 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="space-y-4 mb-8 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                   {participants.map((p, idx) => (
                     <div key={idx} className="bg-white p-4 rounded-2xl border border-green-100 shadow-sm transition-all hover:shadow-md">
-                      <p className="text-xs font-bold text-green-600 mb-2 uppercase">{translations.traveler} {idx + 1}</p>
+                      <p className="text-xs font-bold text-green-600 mb-3 uppercase flex items-center">
+                        <i className="fa-solid fa-user-circle mr-2"></i>
+                        {translations.traveler} {idx + 1}
+                      </p>
+                      
                       <input 
                         type="text" 
                         placeholder={translations.fullName} 
                         value={p.fullName} 
                         onChange={(e) => handleParticipantChange(idx, 'fullName', e.target.value)} 
-                        className="w-full text-sm p-3 mb-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all" 
+                        className="w-full text-sm p-3 mb-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all bg-gray-50" 
                       />
+                      
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase ml-2">{translations.docType}</label>
+                          <select 
+                            value={p.docType} 
+                            onChange={(e) => handleParticipantChange(idx, 'docType', e.target.value)} 
+                            className="w-full text-xs p-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all bg-gray-50 font-medium"
+                          >
+                            <option value="CC">CC</option>
+                            <option value="CE">CE</option>
+                            <option value="Pasaporte">Pasaporte</option>
+                            <option value="Registro Civil">Registro Civil</option>
+                            <option value="TI">TI</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase ml-2">{translations.age}</label>
+                          <input 
+                            type="number" 
+                            placeholder={translations.age} 
+                            value={p.age} 
+                            onChange={(e) => handleParticipantChange(idx, 'age', e.target.value)} 
+                            className="w-full text-sm p-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all bg-gray-50" 
+                          />
+                        </div>
+                      </div>
+                      
                       <input 
                         type="text" 
                         placeholder={translations.docNum} 
                         value={p.docNumber} 
                         onChange={(e) => handleParticipantChange(idx, 'docNumber', e.target.value)} 
-                        className="w-full text-sm p-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all" 
+                        className="w-full text-sm p-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all bg-gray-50" 
                       />
                     </div>
                   ))}
