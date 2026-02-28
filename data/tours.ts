@@ -298,7 +298,7 @@ export const TOURS: Tour[] = [
     id: 'hacienda-napoles',
     title: 'Hacienda Nápoles (Safari)',
     titleEn: 'Hacienda Napoles Safari',
-    price: '$219.000',
+    price: '$299.000',
     image: 'https://i.ibb.co/CKSjpBqT/555.jpg',
     description: '¡Salvaje, divertido y monumental! ¿Quién dijo que para ir de safari hay que ir a África?',
     descriptionEn: 'Wild, fun, and monumental! Who says you have to go to Africa for a safari?',
