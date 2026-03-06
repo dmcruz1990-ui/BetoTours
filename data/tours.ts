@@ -6,7 +6,7 @@ export const TOURS: Tour[] = [
     id: 'guatape',
     title: 'Tour a Guatapé y El Peñol',
     titleEn: 'Guatapé & El Peñol Tour',
-    price: '$109.000',
+    price: '$129.000',
     image: 'https://i.ibb.co/2Y8Ndq5Q/5.jpg',
     description: '¡El clásico que no te puede faltar! Subir la Piedra del Peñol es un reto, ¡pero la vista allá arriba lo vale todo!',
     descriptionEn: 'The classic you can\'t miss! Climbing the Peñol Rock is a challenge, but the view is worth it!',
@@ -46,7 +46,7 @@ export const TOURS: Tour[] = [
       'Medical assistance card'
     ],
     gallery: [
-      'https://i.ibb.co/mkZYTyR/Gemini-Generated-Image-nuuov7nuuov7nuuo.jpg',
+      'https://i.ibb.co/S798FNYQ/Whats-App-Image-2026-03-04-at-7-31-06-PM.jpg',
       'https://i.ibb.co/2Y8Ndq5Q/5.jpg',
       'https://i.ibb.co/wZDxqWY0/4.webp',
       'https://i.ibb.co/5WRhKHSt/3.jpg',
@@ -58,7 +58,7 @@ export const TOURS: Tour[] = [
     id: 'pablo-escobar',
     title: 'Tour Pablo Escobar',
     titleEn: 'Pablo Escobar Historical Tour',
-    price: '$269.000',
+    price: '$289.000',
     image: 'https://i.ibb.co/m5SQLwjt/Whats-App-Image-2026-01-09-at-4-48-49-PM.jpg',
     description: 'En este tour conocerán a detalle la historia del proceso de transformación que tuvo Medellín como consecuencia de las acciones de Pablo Escobar; visitando lugares emblemáticos y museos.',
     descriptionEn: 'In this tour, you will learn in detail the history of the transformation process that Medellín underwent as a result of Pablo Escobar\'s actions, visiting symbolic sites and museums.',
@@ -92,6 +92,7 @@ export const TOURS: Tour[] = [
       'Medical assistance card'
     ],
     gallery: [
+      'https://i.ibb.co/R4N1fb6t/Whats-App-Image-2026-02-27-at-10-13-51-PM.jpg',
       'https://i.ibb.co/m5SQLwjt/Whats-App-Image-2026-01-09-at-4-48-49-PM.jpg'
     ]
   },
@@ -99,7 +100,7 @@ export const TOURS: Tour[] = [
     id: 'city-tour-graffitour',
     title: 'City Tour + Graffitour',
     titleEn: 'City Tour + Graffitour',
-    price: '$99.000',
+    price: '$129.000',
     image: 'https://i.ibb.co/KxDXhPwV/p1.webp',
     description: '¡Conocé la verdadera cara de la Eterna Primavera! Venir a Medellín y no ir a la Comuna 13 es como no haber venido.',
     descriptionEn: 'Get to know the true face of Medellín! Visiting Comuna 13 is a must.',
@@ -139,8 +140,8 @@ export const TOURS: Tour[] = [
       'Medical assistance card'
     ],
     gallery: [
+      'https://i.ibb.co/dwdKYSDJ/Whats-App-Image-2026-03-05-at-10-04-39-PM.jpg',
       'https://i.ibb.co/B2YTb7d5/lugares-para-visitar-medellin-road-trip-travel-2-3232048.jpg',
-      'https://i.ibb.co/KjZ5WCs5/Gemini-Generated-Image-vgtcbnvgtcbnvgtc.jpg',
       'https://i.ibb.co/Z12p6dkd/55.jpg',
       'https://i.ibb.co/WvMghCmx/44.avif',
       'https://i.ibb.co/tMN3vSfW/33.jpg',
@@ -190,7 +191,6 @@ export const TOURS: Tour[] = [
       'Coffee souvenir (80g) and panela'
     ],
     gallery: [
-      'https://i.ibb.co/MD5ctPdh/Whats-App-Image-2026-01-09-at-1-21-38-PM.jpg',
       'https://i.ibb.co/QvyY70Wy/5555.jpg',
       'https://i.ibb.co/7xxGNT7N/4444.jpg',
       'https://i.ibb.co/fdKCNSpW/3333.jpg',
@@ -201,7 +201,7 @@ export const TOURS: Tour[] = [
     id: 'santa-fe',
     title: 'Santa Fe de Antioquia',
     titleEn: 'Santa Fe de Antioquia',
-    price: '$109.000',
+    price: '$129.000',
     image: 'https://i.ibb.co/wh5JBnRL/a7.jpg',
     description: '¡Vámonos a pueblear a la "Ciudad Madre"! Escápate del frío y vámonos a buscar el sol.',
     descriptionEn: 'Let\'s go town-hopping to the "Mother City"! Escape the cold and find the sun.',
@@ -239,7 +239,7 @@ export const TOURS: Tour[] = [
       'Medical assistance card'
     ],
     gallery: [
-      'https://i.ibb.co/27SrjvyT/Whats-App-Image-2026-01-09-at-1-21-54-PM.jpg',
+      'https://i.ibb.co/MyxQ2NMq/Whats-App-Image-2026-02-27-at-10-04-50-PM.jpg',
       'https://i.ibb.co/vWkVQC3/s3.jpg',
       'https://i.ibb.co/tpYG1tJt/s2.jpg',
       'https://i.ibb.co/QvdHvmbY/s4.png',
@@ -251,7 +251,7 @@ export const TOURS: Tour[] = [
     id: 'rio-claro',
     title: 'Aventura en Río Claro',
     titleEn: 'Rio Claro Adventure',
-    price: '$219.000',
+    price: '$259.000',
     image: 'https://i.ibb.co/Y4nRr13S/z6z6z6z6.webp',
     description: '¡Desconectate de la ciudad y conectate con la selva! Río Claro te está llamando.',
     descriptionEn: 'Disconnect from the city and connect with the jungle! Río Claro is calling.',
@@ -287,11 +287,61 @@ export const TOURS: Tour[] = [
       'Medical assistance card'
     ],
     gallery: [
+      'https://i.ibb.co/Nd9hcmRv/Whats-App-Image-2026-02-27-at-10-10-36-PM.jpg',
       'https://i.ibb.co/Y4nRr13S/z6z6z6z6.webp',
       'https://i.ibb.co/VFWNSb7/z3z3z3z.jpg',
       'https://i.ibb.co/8DX4XkGg/z3z3z3z.webp',
       'https://i.ibb.co/FbnWQR0w/z2z2z2z.jpg',
       'https://i.ibb.co/xqkC1y2P/z1z1z1.jpg'
+    ]
+  },
+  {
+    id: 'hacienda-napoles-basico',
+    title: 'Hacienda Nápoles (Básico)',
+    titleEn: 'Hacienda Napoles Basic',
+    price: '$259.000',
+    image: 'https://i.ibb.co/CKSjpBqT/555.jpg',
+    description: '¡Conocé la famosa Hacienda Nápoles sin perderte lo esencial! Un plan perfecto para disfrutar del parque temático más icónico de Colombia.',
+    descriptionEn: 'Discover the famous Hacienda Nápoles without missing the essentials! A perfect plan to enjoy Colombia\'s most iconic theme park.',
+    highlights: [
+      'Recorré el parque temático más famoso de Colombia.',
+      'Conocé los hipopótamos y otros animales exóticos.',
+      'Explorá el parque jurásico con dinosaurios gigantes.',
+      'Disfrutá de un día lleno de historia y diversión.'
+    ],
+    highlightsEn: [
+      'Tour Colombia\'s most famous theme park.',
+      'Meet the hippos and other exotic animals.',
+      'Explore the Jurassic park with giant dinosaurs.',
+      'Enjoy a day full of history and fun.'
+    ],
+    category: 'Adventure',
+    duration: 'Full Day',
+    durationEn: 'Full Day',
+    includes: [
+      'Transporte ida y vuelta',
+      'Pasaporte Básico de entrada al parque',
+      'Visita a los Hipopótamos',
+      'Parque Jurásico y Museo Memorial',
+      'Desayuno incluido',
+      'Guía acompañante',
+      'Tarjeta de asistencia médica'
+    ],
+    includesEn: [
+      'Round-trip transportation',
+      'Basic park entrance passport',
+      'Hippopotamus visit',
+      'Jurassic Park and Memorial Museum',
+      'Breakfast included',
+      'Accompanying guide',
+      'Medical assistance card'
+    ],
+    gallery: [
+      'https://i.ibb.co/bRdhCLHj/Whats-App-Image-2026-02-27-at-10-17-04-PM.jpg',
+      'https://i.ibb.co/CKzGxtgq/444.avif',
+      'https://i.ibb.co/TFWTgqn/333.webp',
+      'https://i.ibb.co/4ZVDKbjt/222.jpg',
+      'https://i.ibb.co/5xBt2Rzr/111.jpg'
     ]
   },
   {
@@ -338,7 +388,7 @@ export const TOURS: Tour[] = [
       'Medical assistance card'
     ],
     gallery: [
-      'https://i.ibb.co/fdNt2g7z/Whats-App-Image-2026-01-09-at-1-19-49-PM.jpg',
+      'https://i.ibb.co/bRdhCLHj/Whats-App-Image-2026-02-27-at-10-17-04-PM.jpg',
       'https://i.ibb.co/CKzGxtgq/444.avif',
       'https://i.ibb.co/TFWTgqn/333.webp',
       'https://i.ibb.co/4ZVDKbjt/222.jpg',

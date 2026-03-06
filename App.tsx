@@ -13,6 +13,7 @@ interface Participant {
   docType: string;
   docNumber: string;
   age: string;
+  phone: string;
 }
 
 const App: React.FC = () => {
@@ -24,12 +25,12 @@ const App: React.FC = () => {
   // Estado para la reserva
   const [numPeople, setNumPeople] = useState<number>(1);
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [participants, setParticipants] = useState<Participant[]>([{ fullName: '', docType: 'CC', docNumber: '', age: '' }]);
+  const [participants, setParticipants] = useState<Participant[]>([{ fullName: '', docType: 'CC', docNumber: '', age: '', phone: '' }]);
 
   useEffect(() => {
     setNumPeople(1);
     setSelectedDate('');
-    setParticipants([{ fullName: '', docType: 'CC', docNumber: '', age: '' }]);
+    setParticipants([{ fullName: '', docType: 'CC', docNumber: '', age: '', phone: '' }]);
     setCurrentImageIndex(0);
   }, [selectedTour]);
 
@@ -39,7 +40,7 @@ const App: React.FC = () => {
     const newParticipants = [...participants];
     if (n > participants.length) {
       for (let i = participants.length; i < n; i++) {
-        newParticipants.push({ fullName: '', docType: 'CC', docNumber: '', age: '' });
+        newParticipants.push({ fullName: '', docType: 'CC', docNumber: '', age: '', phone: '' });
       }
     } else {
       newParticipants.splice(n);
@@ -71,14 +72,14 @@ const App: React.FC = () => {
       return;
     }
 
-    const incomplete = participants.some(p => !p.fullName.trim() || !p.docNumber.trim() || !p.age.trim());
+    const incomplete = participants.some(p => !p.fullName.trim() || !p.docNumber.trim() || !p.age.trim() || !p.phone.trim());
     if (incomplete) {
-      alert(language === 'es' ? "¡Parce! Por favor llene todos los datos (nombre, documento y edad) de los viajeros." : "Buddy! Please fill in all details (name, ID, and age) for all travelers.");
+      alert(language === 'es' ? "¡Parce! Por favor llene todos los datos (nombre, documento, edad y celular) de los viajeros." : "Buddy! Please fill in all details (name, ID, age, and phone) for all travelers.");
       return;
     }
 
     let passengersText = participants.map((p, i) => 
-      `👉 *Viajero ${i + 1}:* ${p.fullName} (${p.age} años) - ${p.docType}: ${p.docNumber}`
+      `👉 *Viajero ${i + 1}:* ${p.fullName} (${p.age} años) - ${p.docType}: ${p.docNumber} - Cel: ${p.phone}`
     ).join('\n');
 
     const tourTitle = language === 'es' ? tour.title : tour.titleEn;
@@ -120,7 +121,8 @@ const App: React.FC = () => {
     highlightsLabel: language === 'es' ? '¡Lo que te espera!' : 'What awaits you!',
     includesLabel: language === 'es' ? '¿Qué incluye?' : 'Includes',
     traveler: language === 'es' ? 'Viajero' : 'Traveler',
-    modalReserveTitle: language === 'es' ? '¡Reserve ya!' : 'Book now!'
+    modalReserveTitle: language === 'es' ? '¡Reserve ya!' : 'Book now!',
+    phone: language === 'es' ? 'Número de celular' : 'Phone Number'
   };
 
   const renderHome = () => (
@@ -197,12 +199,18 @@ const App: React.FC = () => {
             </button>
             
             {/* Carousel Side */}
-            <div className="lg:w-1/2 h-80 lg:h-auto relative group">
-              <img 
-                src={selectedTour.gallery ? selectedTour.gallery[currentImageIndex] : selectedTour.image} 
-                className="w-full h-full object-cover" 
-                alt={selectedTour.title}
-              />
+            <div className="lg:w-1/2 h-80 lg:h-auto relative group bg-gray-900">
+              {(() => {
+                const imgSrc = selectedTour.gallery ? selectedTour.gallery[currentImageIndex] : selectedTour.image;
+                const isPromoFlyer = imgSrc.includes('WhatsApp-Image');
+                return (
+                  <img
+                    src={imgSrc}
+                    className={`w-full h-full ${isPromoFlyer ? 'object-contain' : 'object-cover'}`}
+                    alt={selectedTour.title}
+                  />
+                );
+              })()}
               {selectedTour.gallery && selectedTour.gallery.length > 1 && (
                 <>
                   <button 
@@ -332,12 +340,20 @@ const App: React.FC = () => {
                         </div>
                       </div>
                       
-                      <input 
-                        type="text" 
-                        placeholder={translations.docNum} 
-                        value={p.docNumber} 
-                        onChange={(e) => handleParticipantChange(idx, 'docNumber', e.target.value)} 
-                        className="w-full text-sm p-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all bg-gray-50" 
+                      <input
+                        type="text"
+                        placeholder={translations.docNum}
+                        value={p.docNumber}
+                        onChange={(e) => handleParticipantChange(idx, 'docNumber', e.target.value)}
+                        className="w-full text-sm p-3 mb-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all bg-gray-50"
+                      />
+
+                      <input
+                        type="tel"
+                        placeholder={translations.phone}
+                        value={p.phone}
+                        onChange={(e) => handleParticipantChange(idx, 'phone', e.target.value)}
+                        className="w-full text-sm p-3 border border-gray-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none transition-all bg-gray-50"
                       />
                     </div>
                   ))}
