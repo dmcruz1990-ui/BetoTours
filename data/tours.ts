@@ -100,7 +100,7 @@ export const TOURS: Tour[] = [
     id: 'city-tour-graffitour',
     title: 'City Tour + Graffitour',
     titleEn: 'City Tour + Graffitour',
-    price: '$129.000',
+    price: '$119.000',
     image: 'https://i.ibb.co/KxDXhPwV/p1.webp',
     description: '¡Conocé la verdadera cara de la Eterna Primavera! Venir a Medellín y no ir a la Comuna 13 es como no haber venido.',
     descriptionEn: 'Get to know the true face of Medellín! Visiting Comuna 13 is a must.',
