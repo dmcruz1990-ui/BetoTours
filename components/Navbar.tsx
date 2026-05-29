@@ -37,6 +37,10 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, language, onLa
               {item.label}
             </button>
           ))}
+          <a href="/alojamientos.html" target="_blank" rel="noopener noreferrer" className="font-bold text-gray-600 hover:text-green-600 inline-flex items-center gap-1">
+            <i className="fa-solid fa-bed text-sm"></i>
+            {language === 'es' ? 'Alojamientos' : 'Stays'}
+          </a>
           <div className="flex bg-gray-100 rounded-full p-1">
             <button onClick={() => onLanguageChange('es')} className={`px-2 py-1 text-xs font-bold rounded-full ${language === 'es' ? 'bg-white shadow text-green-600' : 'text-gray-400'}`}>ES</button>
             <button onClick={() => onLanguageChange('en')} className={`px-2 py-1 text-xs font-bold rounded-full ${language === 'en' ? 'bg-white shadow text-green-600' : 'text-gray-400'}`}>EN</button>

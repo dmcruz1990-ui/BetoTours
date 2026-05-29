@@ -122,7 +122,10 @@ const App: React.FC = () => {
     includesLabel: language === 'es' ? '¿Qué incluye?' : 'Includes',
     traveler: language === 'es' ? 'Viajero' : 'Traveler',
     modalReserveTitle: language === 'es' ? '¡Reserve ya!' : 'Book now!',
-    phone: language === 'es' ? 'Número de celular' : 'Phone Number'
+    phone: language === 'es' ? 'Número de celular' : 'Phone Number',
+    stayTitle: language === 'es' ? '¿Buscas quedarte en Medellín?' : 'Looking to stay in Medellín?',
+    staySub: language === 'es' ? 'Conoce nuestros aparta suites amoblados en el corazón de la ciudad: cómodos, privados y a pocos minutos del Centro.' : 'Check out our furnished apart-suites in the heart of the city: cozy, private and minutes from Downtown.',
+    stayBtn: language === 'es' ? 'Ver alojamientos' : 'View stays'
   };
 
   const renderHome = () => (
@@ -140,6 +143,28 @@ const App: React.FC = () => {
           <button onClick={() => setCurrentView('tours')} className="bg-green-600 hover:bg-green-700 text-white px-10 py-4 rounded-full font-bold transition shadow-2xl hover:scale-105">
             {translations.heroBtn}
           </button>
+        </div>
+      </section>
+      <section className="relative overflow-hidden paisa-gradient text-white">
+        <div className="max-w-7xl mx-auto px-4 py-12 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-5 text-center md:text-left flex-col md:flex-row">
+            <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center flex-shrink-0 border border-white/20">
+              <i className="fa-solid fa-building text-3xl text-white"></i>
+            </div>
+            <div>
+              <h2 className="text-2xl md:text-3xl font-black drop-shadow">{translations.stayTitle}</h2>
+              <p className="text-white/90 mt-1 max-w-xl font-medium">{translations.staySub}</p>
+            </div>
+          </div>
+          <a
+            href="/alojamientos.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-white text-green-700 font-black px-8 py-4 rounded-full whitespace-nowrap shadow-2xl hover:scale-105 transition"
+          >
+            {translations.stayBtn}
+            <i className="fa-solid fa-arrow-right"></i>
+          </a>
         </div>
       </section>
       <section className="py-16 max-w-7xl mx-auto px-4">
