@@ -905,6 +905,11 @@ const RoomsCalendar: React.FC = () => {
 
   const busyThisMonth = Object.keys(dayMap).filter(d => d.startsWith(ymd(year, month, 1).slice(0, 7))).length;
 
+  // Reservas de esta habitación y la más temprana (para saltar al mes correcto)
+  const roomRes = reservations.filter(r => r.room_id === roomId);
+  const earliestRoom = roomRes.length ? roomRes.reduce((a, b) => (a.check_in < b.check_in ? a : b)) : null;
+  const jumpToDate = (ds: string) => { const d = new Date(ds + 'T00:00:00'); setYear(d.getFullYear()); setMonth(d.getMonth()); };
+
   if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
 
   const onDayClick = (d: number) => {
@@ -955,6 +960,15 @@ const RoomsCalendar: React.FC = () => {
             <p className="font-black text-gray-800">{MONTHS_ES[month]} {year}</p>
             <button onClick={nextMonth} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-right"></i></button>
           </div>
+
+          {busyThisMonth === 0 && earliestRoom && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-2.5 mb-3 text-xs flex items-center justify-between gap-2 flex-wrap">
+              <span><i className="fa-solid fa-circle-info mr-1"></i>Esta habitación tiene reservas en otro mes.</span>
+              <button onClick={() => jumpToDate(earliestRoom.check_in)} className="font-bold text-green-700 bg-green-50 hover:bg-green-100 px-2.5 py-1 rounded">
+                Ir a {MONTHS_ES[new Date(earliestRoom.check_in + 'T00:00:00').getMonth()]} <i className="fa-solid fa-arrow-right-long ml-1"></i>
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-7 gap-1.5 mb-1.5">
             {WEEKDAYS_ES.map(d => <div key={d} className="text-center text-[11px] font-bold text-gray-400 py-1">{d}</div>)}
