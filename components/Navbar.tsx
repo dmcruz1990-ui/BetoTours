@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface NavbarProps {
-  onNavigate: (view: 'home' | 'tours' | 'about' | 'contact') => void;
+  onNavigate: (view: 'home' | 'tours' | 'about' | 'contact' | 'blog' | 'admin') => void;
   currentView: string;
   language: 'es' | 'en';
   onLanguageChange: (lang: 'es' | 'en') => void;
@@ -10,16 +10,18 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, language, onLanguageChange }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const navItems = language === 'es' 
+  const navItems = language === 'es'
     ? [
         { label: 'Inicio', view: 'home' },
         { label: 'Planes', view: 'tours' },
+        { label: 'Blog', view: 'blog' },
         { label: 'Nosotros', view: 'about' },
         { label: 'Contacto', view: 'contact' },
       ]
     : [
         { label: 'Home', view: 'home' },
         { label: 'Tours', view: 'tours' },
+        { label: 'Blog', view: 'blog' },
         { label: 'About', view: 'about' },
         { label: 'Contact', view: 'contact' },
       ];
