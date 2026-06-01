@@ -11,10 +11,13 @@ import { supabase } from './lib/supabase.ts';
 
 type View = 'home' | 'tours' | 'about' | 'contact' | 'blog' | 'admin';
 
-// Routing por hash: permite enlaces directos /#/blog y /#/admin
+// Routing: acepta tanto /#/admin como /admin (Netlify redirige el path a index.html)
+const VALID_VIEWS = ['blog', 'admin', 'tours', 'about', 'contact'];
 const viewFromHash = (): View => {
   const h = window.location.hash.replace(/^#\/?/, '').toLowerCase();
-  if (h === 'blog' || h === 'admin' || h === 'tours' || h === 'about' || h === 'contact') return h as View;
+  if (VALID_VIEWS.includes(h)) return h as View;
+  const p = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (VALID_VIEWS.includes(p)) return p as View;
   return 'home';
 };
 
