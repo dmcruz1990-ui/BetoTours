@@ -20,7 +20,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [demo, setDemo] = useState<boolean>(() => {
     try { return localStorage.getItem('beto_demo') === '1'; } catch { return false; }
   });
-  const [tab, setTab] = useState<'reservas' | 'rooms' | 'avail' | 'blog'>('reservas');
+  const [tab, setTab] = useState<'reservas' | 'board' | 'rooms' | 'avail' | 'blog'>('reservas');
 
   // Login form — pre-llenado para acceso demo
   const [email, setEmail] = useState('dmcruz1990@gmail.com');
@@ -139,6 +139,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('reservas')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'reservas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-bell-concierge mr-2"></i>Reservas
         </button>
+        <button onClick={() => setTab('board')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'board' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-table-columns mr-2"></i>Tablero
+        </button>
         <button onClick={() => setTab('rooms')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'rooms' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-calendar-days mr-2"></i>Calendario
         </button>
@@ -150,7 +153,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         </button>
       </div>
 
-      {tab === 'reservas' ? <ReservationsManager /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
+      {tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
     </div>
   );
 };
@@ -259,7 +262,7 @@ const STATUS_META: Record<ReservationStatus, { label: string; chip: string; dot:
   confirmed: { label: 'Confirmada', chip: 'text-green-700 bg-green-50 border-green-200', dot: 'bg-green-500', cell: 'bg-red-500 text-white hover:bg-red-600' },
   cancelled: { label: 'Cancelada',  chip: 'text-gray-400 bg-gray-100 border-gray-200',  dot: 'bg-gray-400', cell: '' },
 };
-const SOURCE_LABEL: Record<string, string> = { web: 'Web', whatsapp: 'WhatsApp', ayenda: 'Ayenda', manual: 'Manual' };
+const SOURCE_LABEL: Record<string, string> = { web: 'Web', whatsapp: 'WhatsApp', ayenda: 'Ayenda', externo: 'Externo', manual: 'Manual' };
 
 // ¿El error de Supabase indica que falta la tabla reservations?
 const isMissingTable = (err: any) => {
@@ -345,6 +348,7 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
             <option value="web">Web</option>
             <option value="whatsapp">WhatsApp</option>
             <option value="ayenda">Ayenda</option>
+            <option value="externo">Externo</option>
           </select>
         </label>
         <label className="text-sm font-bold text-gray-600 sm:col-span-2">Nota (opcional)
@@ -517,6 +521,143 @@ const ReservationsManager: React.FC = () => {
           })}
         </div>
       )}
+    </div>
+  );
+};
+
+// ============ TABLERO (TIMELINE estilo channel manager) ============
+// Color de la barra según estado/origen (igual que la leyenda de Ayenda)
+const barColor = (r: Reservation): { cls: string; label: string } => {
+  if (/bloque/i.test(r.guest_name) || /bloque/i.test(r.note || '')) return { cls: 'bg-red-300 text-red-900', label: 'Bloqueado' };
+  if (r.source === 'ayenda' || r.source === 'externo') return { cls: 'bg-blue-300 text-blue-900', label: 'Externo' };
+  if (r.status === 'pending') return { cls: 'bg-amber-400 text-white', label: 'Pendiente' };
+  if (r.status === 'confirmed') return { cls: 'bg-green-400 text-white', label: 'Reservado' };
+  return { cls: 'bg-gray-200 text-gray-700', label: '' };
+};
+
+const TimelineBoard: React.FC = () => {
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+  const [start, setStart] = useState(todayStr());
+  const [days, setDays] = useState(14);
+  const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('reservations').select('*').neq('status', 'cancelled');
+    if (error && isMissingTable(error)) { setMissing(true); setReservations([]); }
+    else { setMissing(false); setReservations((data as Reservation[]) || []); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const ch = supabase.channel('board-stream')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
+
+  // Lista de días de la ventana
+  const dayList = Array.from({ length: days }, (_, i) => addDaysStr(start, i));
+  // Mapa habitación -> (día -> reserva)
+  const map: Record<string, Record<string, Reservation>> = {};
+  reservations.forEach(r => {
+    if (!map[r.room_id]) map[r.room_id] = {};
+    nightsBetween(r.check_in, r.check_out).forEach(d => { map[r.room_id][d] = r; });
+  });
+
+  const dow = (ds: string) => { const d = new Date(ds + 'T00:00:00'); return WEEKDAYS_ES[(d.getDay() + 6) % 7]; };
+  const dayNum = (ds: string) => new Date(ds + 'T00:00:00').getDate();
+  const isWeekend = (ds: string) => { const w = new Date(ds + 'T00:00:00').getDay(); return w === 0 || w === 6; };
+  const isToday = (ds: string) => ds === todayStr();
+
+  const shift = (n: number) => setStart(addDaysStr(start, n));
+
+  const COL = 46; // ancho de cada día en px
+
+  return (
+    <div>
+      {missing && <SetupBanner />}
+
+      {/* Controles */}
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <button onClick={() => shift(-days)} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-left"></i></button>
+          <button onClick={() => setStart(todayStr())} className="px-3 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold">Hoy</button>
+          <button onClick={() => shift(days)} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-right"></i></button>
+          <span className="text-sm font-bold text-gray-700 ml-1">{fmtDate(start)} → {fmtDate(addDaysStr(start, days - 1))}</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-gray-400 font-bold">Ver:</span>
+          {[7, 14, 30].map(n => (
+            <button key={n} onClick={() => setDays(n)} className={`px-2.5 py-1 rounded-lg font-bold ${days === n ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{n}d</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Leyenda */}
+      <div className="flex items-center gap-4 mb-3 text-xs flex-wrap">
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-green-400"></span>Reservado</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-amber-400"></span>Pendiente</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-blue-300"></span>Externo</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-red-300"></span>Bloqueado</span>
+      </div>
+
+      {/* Tabla timeline */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <div className="min-w-max">
+          {/* Encabezado de días */}
+          <div className="flex border-b border-gray-100 sticky top-0 bg-white z-10">
+            <div className="w-44 flex-shrink-0 px-3 py-2 font-black text-gray-500 text-xs uppercase tracking-wide border-r border-gray-100">Alojamiento</div>
+            {dayList.map(ds => (
+              <div key={ds} style={{ width: COL }} className={`flex-shrink-0 text-center py-2 border-r border-gray-50 ${isToday(ds) ? 'bg-green-50' : isWeekend(ds) ? 'bg-gray-50' : ''}`}>
+                <div className="text-[10px] text-gray-400 font-bold uppercase">{dow(ds)}</div>
+                <div className={`text-sm font-black ${isToday(ds) ? 'text-green-600' : 'text-gray-700'}`}>{dayNum(ds)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filas por habitación */}
+          {loading ? (
+            <div className="text-center py-12 text-gray-300"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>
+          ) : ROOMS.map(room => {
+            const rmap = map[room.id] || {};
+            return (
+              <div key={room.id} className="flex border-b border-gray-50 hover:bg-gray-50/50">
+                <div className="w-44 flex-shrink-0 px-3 py-3 text-sm font-bold text-gray-700 border-r border-gray-100 flex items-center gap-2">
+                  <i className={`fa-solid ${room.penthouse ? 'fa-crown' : 'fa-door-closed'} text-[10px] text-gray-400`}></i>
+                  <span className="truncate">{room.name}</span>
+                </div>
+                {dayList.map(ds => {
+                  const r = rmap[ds];
+                  const isStart = r && r.check_in === ds;
+                  const meta = r ? barColor(r) : null;
+                  return (
+                    <button key={ds} onClick={() => r ? setEditing(r) : setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) }))}
+                      title={r ? `${r.guest_name} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)} (${meta!.label})` : `${room.name} · ${fmtDate(ds)} — libre`}
+                      style={{ width: COL }}
+                      className={`flex-shrink-0 h-12 border-r border-gray-50 relative flex items-center justify-center text-[11px] font-bold overflow-visible ${isToday(ds) ? 'bg-green-50/40' : isWeekend(ds) && !r ? 'bg-gray-50/60' : ''}`}>
+                      {r && (
+                        <span className={`absolute inset-y-1.5 left-0.5 right-0.5 rounded ${meta!.cls} flex items-center px-1 whitespace-nowrap overflow-hidden`}>
+                          {isStart ? r.guest_name.split(' ')[0] : ''}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="text-[11px] text-gray-400 mt-3 text-center">
+        <i className="fa-solid fa-circle-info mr-1"></i>
+        Clic en una celda libre para crear una reserva; clic en una barra para abrir la reserva. Desliza para ver más días.
+      </p>
     </div>
   );
 };

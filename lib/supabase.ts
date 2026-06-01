@@ -35,7 +35,7 @@ export interface AvailabilityItem {
 }
 
 export type ReservationStatus = 'pending' | 'confirmed' | 'cancelled';
-export type ReservationSource = 'web' | 'whatsapp' | 'ayenda' | 'manual';
+export type ReservationSource = 'web' | 'whatsapp' | 'ayenda' | 'externo' | 'manual';
 
 export interface Reservation {
   id: string;
