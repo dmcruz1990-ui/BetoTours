@@ -5,12 +5,14 @@ interface TourCardProps {
   tour: Tour;
   onSelect: (tour: Tour) => void;
   language: 'es' | 'en';
+  available?: boolean; // undefined = sin dato (se asume disponible)
 }
 
-const TourCard: React.FC<TourCardProps> = ({ tour, onSelect, language }) => {
+const TourCard: React.FC<TourCardProps> = ({ tour, onSelect, language, available }) => {
   const displayTitle = language === 'es' ? tour.title : tour.titleEn;
   const displayDesc = language === 'es' ? tour.description : tour.descriptionEn;
   const displayIncludes = language === 'es' ? tour.includes : tour.includesEn;
+  const soldOut = available === false;
   
   const getCategoryLabel = () => {
     if (language === 'es') {
@@ -36,6 +38,12 @@ const TourCard: React.FC<TourCardProps> = ({ tour, onSelect, language }) => {
         </div>
         <div className="absolute top-4 left-4 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded uppercase tracking-wider">
           {getCategoryLabel()}
+        </div>
+        <div className={`absolute bottom-4 left-4 text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ${soldOut ? 'bg-red-500 text-white' : 'bg-white text-green-700'}`}>
+          <i className={`fa-solid ${soldOut ? 'fa-circle-xmark' : 'fa-circle-check'} mr-1.5`}></i>
+          {soldOut
+            ? (language === 'es' ? 'Agotado' : 'Sold out')
+            : (language === 'es' ? 'Disponible' : 'Available')}
         </div>
       </div>
       

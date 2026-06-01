@@ -3,10 +3,20 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar.tsx';
 import TourCard from './components/TourCard.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
+import Blog from './components/Blog.tsx';
+import AdminPanel from './components/AdminPanel.tsx';
 import { TOURS } from './data/tours.ts';
 import { Tour } from './types.ts';
+import { supabase } from './lib/supabase.ts';
 
-type View = 'home' | 'tours' | 'about' | 'contact';
+type View = 'home' | 'tours' | 'about' | 'contact' | 'blog' | 'admin';
+
+// Routing por hash: permite enlaces directos /#/blog y /#/admin
+const viewFromHash = (): View => {
+  const h = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+  if (h === 'blog' || h === 'admin' || h === 'tours' || h === 'about' || h === 'contact') return h as View;
+  return 'home';
+};
 
 interface Participant {
   fullName: string;
@@ -17,15 +27,45 @@ interface Participant {
 }
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<View>('home');
+  const [currentView, setCurrentView] = useState<View>(viewFromHash());
   const [selectedTour, setSelectedTour] = useState<Tour | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [language, setLanguage] = useState<'es' | 'en'>('es');
-  
+  // Disponibilidad de tours: { [tourId]: boolean }
+  const [tourAvailability, setTourAvailability] = useState<Record<string, boolean>>({});
+
   // Estado para la reserva
   const [numPeople, setNumPeople] = useState<number>(1);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [participants, setParticipants] = useState<Participant[]>([{ fullName: '', docType: 'CC', docNumber: '', age: '', phone: '' }]);
+
+  // Mantener la vista sincronizada con el hash (botón atrás del navegador, enlaces directos)
+  useEffect(() => {
+    const onHash = () => setCurrentView(viewFromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const navigate = (view: View) => {
+    window.location.hash = view === 'home' ? '/' : `/${view}`;
+    setCurrentView(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Cargar disponibilidad de tours desde Supabase
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from('availability')
+        .select('ref_id, is_available')
+        .eq('kind', 'tour');
+      if (!error && data) {
+        const map: Record<string, boolean> = {};
+        data.forEach((r: any) => { map[r.ref_id] = r.is_available; });
+        setTourAvailability(map);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     setNumPeople(1);
@@ -171,7 +211,7 @@ const App: React.FC = () => {
         <h2 className="text-3xl font-black mb-10">{translations.featuredTitle}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {TOURS.slice(0, 3).map(tour => (
-            <TourCard key={tour.id} tour={tour} onSelect={setSelectedTour} language={language} />
+            <TourCard key={tour.id} tour={tour} onSelect={setSelectedTour} language={language} available={tourAvailability[tour.id]} />
           ))}
         </div>
       </section>
@@ -180,15 +220,17 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <Navbar onNavigate={setCurrentView} currentView={currentView} language={language} onLanguageChange={setLanguage} />
+      <Navbar onNavigate={navigate} currentView={currentView} language={language} onLanguageChange={setLanguage} />
       <main className="pt-20">
         {currentView === 'home' && renderHome()}
+        {currentView === 'blog' && <Blog language={language} />}
+        {currentView === 'admin' && <AdminPanel language={language} />}
         {currentView === 'tours' && (
           <div className="py-12 max-w-7xl mx-auto px-4">
             <h1 className="text-4xl font-black mb-10">{translations.catalogTitle}</h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {TOURS.map(tour => (
-                <TourCard key={tour.id} tour={tour} onSelect={setSelectedTour} language={language} />
+                <TourCard key={tour.id} tour={tour} onSelect={setSelectedTour} language={language} available={tourAvailability[tour.id]} />
               ))}
             </div>
           </div>
