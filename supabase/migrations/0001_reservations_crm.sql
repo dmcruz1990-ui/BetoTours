@@ -44,4 +44,10 @@ drop policy if exists "reservations_delete" on public.reservations;
 create policy "reservations_delete" on public.reservations for delete using (true);
 
 -- Tiempo real: las reservas se ven en vivo en el panel sin recargar.
-alter publication supabase_realtime add table public.reservations;
+-- (idempotente: si ya estaba agregada, no falla al volver a correr el script)
+do $$
+begin
+  alter publication supabase_realtime add table public.reservations;
+exception
+  when duplicate_object then null;
+end $$;
