@@ -289,6 +289,45 @@
   <p><a href="https://www.instagram.com/apartasuitestorredeprado/" target="_blank">Síguenos en Instagram @apartasuitestorredeprado</a></p>
 </footer>
 
+<style>
+  .btn-book-page{width:100%;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;background:#16a34a;color:#fff;border:none;border-radius:12px;padding:13px;font-weight:800;font-size:13px;letter-spacing:.3px;cursor:pointer;transition:background .15s}
+  .btn-book-page:hover{background:#15803d}
+  .bk-overlay{display:none;position:fixed;inset:0;background:rgba(12,26,46,.6);z-index:9999;align-items:center;justify-content:center;padding:16px}
+  .bk-card{background:#fff;border-radius:20px;max-width:460px;width:100%;max-height:92vh;overflow:auto;padding:24px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .bk-card h3{margin:0 0 2px;font-size:22px;color:#0c1a2e}
+  .bk-room{margin:0 0 16px;color:#16a34a;font-weight:800}
+  .bk-x{position:absolute;top:14px;right:16px;background:none;border:none;font-size:26px;line-height:1;color:#94a3b8;cursor:pointer}
+  .bk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .bk-grid label{display:flex;flex-direction:column;font-size:12px;font-weight:700;color:#475569;gap:5px}
+  .bk-grid .bk-full{grid-column:1 / -1}
+  .bk-grid input,.bk-grid textarea{font:inherit;font-weight:400;padding:11px;border:1px solid #e2e8f0;border-radius:11px;outline:none}
+  .bk-grid input:focus,.bk-grid textarea:focus{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.2)}
+  .bk-msg{font-size:13px;font-weight:700;margin:14px 0 0;min-height:18px}
+  .bk-submit{width:100%;margin-top:14px;background:#16a34a;color:#fff;border:none;border-radius:12px;padding:14px;font-weight:800;font-size:15px;cursor:pointer}
+  .bk-submit:hover{background:#15803d}.bk-submit:disabled{opacity:.6}
+  .bk-foot{text-align:center;font-size:11px;color:#94a3b8;margin:10px 0 0}
+</style>
+
+<div id="bookModal" class="bk-overlay" onclick="if(event.target===this)closeBook()">
+  <div class="bk-card">
+    <button class="bk-x" onclick="closeBook()">&times;</button>
+    <h3>Solicitar reserva</h3>
+    <p class="bk-room" id="bkRoom"></p>
+    <div class="bk-grid">
+      <label>Entrada<input type="date" id="bkIn"></label>
+      <label>Salida<input type="date" id="bkOut"></label>
+      <label>Huéspedes<input type="number" id="bkGuests" min="1" value="2"></label>
+      <label>Celular / WhatsApp<input id="bkPhone" placeholder="300 123 4567"></label>
+      <label class="bk-full">Tu nombre<input id="bkName" placeholder="Nombre y apellido"></label>
+      <label class="bk-full">Correo (opcional)<input type="email" id="bkEmail" placeholder="correo@ejemplo.com"></label>
+      <label class="bk-full">Mensaje (opcional)<textarea id="bkNote" rows="2" placeholder="¿Algo que debamos saber?"></textarea></label>
+    </div>
+    <p class="bk-msg" id="bkMsg"></p>
+    <button class="bk-submit" id="bkSubmit" onclick="submitBook()">Enviar solicitud</button>
+    <p class="bk-foot">Te confirmaremos la disponibilidad por WhatsApp. Sin pagos por ahora.</p>
+  </div>
+</div>
+
 <a class="float-wa" onclick="reservar('')">
   <svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm5.8 14.04c-.24.68-1.42 1.31-1.95 1.36-.5.05-.94.23-3.18-.66-2.68-1.06-4.4-3.79-4.53-3.97-.13-.18-1.09-1.45-1.09-2.77 0-1.31.69-1.96.93-2.23.24-.27.53-.34.7-.34.18 0 .35 0 .51.01.16.01.38-.06.6.46.24.56.8 1.94.87 2.08.07.14.12.3.02.48-.09.18-.14.29-.27.45-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.27.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.21 1.37.27.14.43.12.59-.07.16-.18.68-.79.86-1.06.18-.27.36-.23.6-.14.24.09 1.55.73 1.81.87.27.14.45.2.51.31.07.11.07.63-.17 1.31z"/></svg>
 </a>
@@ -379,6 +418,10 @@
           </div>
           <div class="amen">${s.amen.map(a=>`<span>${a}</span>`).join('')}</div>
           <div class="price"><span class="from">Desde </span><span class="amt">$${s.price}</span><span class="per"> / noche</span></div>
+          <button class="btn-book-page" onclick="solicitarReserva('${s.name.replace(/'/g,"")}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>
+            SOLICITAR RESERVA
+          </button>
           ${s.book ? `
           <div class="btn-row">
             <button class="btn-reserve" onclick="reservarOnline('${s.book}')">
@@ -399,6 +442,50 @@
   }
 
   function toggleMenu(){ const m=document.querySelector('.menu'); m.style.display = m.style.display==='flex'?'none':'flex'; }
+
+  // ===== SOLICITUD DE RESERVA -> Supabase (CRM) =====
+  let bkRoom = '';
+  const isoDay = d => d.toISOString().slice(0, 10);
+  function $(id){ return document.getElementById(id); }
+
+  function solicitarReserva(name){
+    bkRoom = name;
+    $('bkRoom').textContent = name;
+    $('bkIn').value  = isoDay(new Date());
+    $('bkOut').value = isoDay(new Date(Date.now() + 864e5));
+    $('bkMsg').textContent = '';
+    $('bkName').value = ''; $('bkPhone').value = ''; $('bkEmail').value = ''; $('bkNote').value = ''; $('bkGuests').value = 2;
+    $('bookModal').style.display = 'flex';
+  }
+  function closeBook(){ $('bookModal').style.display = 'none'; }
+
+  async function submitBook(){
+    const name = $('bkName').value.trim(), phone = $('bkPhone').value.trim(), email = $('bkEmail').value.trim();
+    const ci = $('bkIn').value, co = $('bkOut').value, guests = Number($('bkGuests').value) || 1, note = $('bkNote').value.trim();
+    const msg = $('bkMsg');
+    if(!name){ msg.style.color = '#dc2626'; msg.textContent = 'Por favor escribe tu nombre.'; return; }
+    if(!phone){ msg.style.color = '#dc2626'; msg.textContent = 'Déjanos un celular para confirmarte.'; return; }
+    if(!ci || !co || co <= ci){ msg.style.color = '#dc2626'; msg.textContent = 'Revisa las fechas (la salida debe ser después de la entrada).'; return; }
+    const room_id = (bkRoom.match(/\d{3}/) || [''])[0];
+    const btn = $('bkSubmit'); btn.disabled = true; btn.textContent = 'Enviando...';
+    try{
+      const res = await fetch(`${SB_URL}/rest/v1/reservations`, {
+        method: 'POST',
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ room_id, room_name: bkRoom, guest_name: name, guest_phone: phone, guest_email: email || null, check_in: ci, check_out: co, guests, status: 'pending', source: 'web', note: note || null })
+      });
+      if(!res.ok){ throw new Error(await res.text()); }
+      msg.style.color = '#16a34a';
+      msg.textContent = '¡Solicitud enviada! Te confirmamos la disponibilidad por WhatsApp.';
+      setTimeout(() => {
+        const m = `Hola Torre de Prado 👋 Solicité el *${bkRoom}* del ${ci} al ${co} para ${guests} huéspedes. Mi nombre: ${name}.`;
+        window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(m)}`, '_blank');
+      }, 900);
+    }catch(e){
+      msg.style.color = '#dc2626';
+      msg.textContent = 'No se pudo enviar en línea. Escríbenos por WhatsApp y te ayudamos.';
+    }finally{ btn.disabled = false; btn.textContent = 'Enviar solicitud'; }
+  }
 
   renderFilters();
   render();
