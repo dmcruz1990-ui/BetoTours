@@ -16,9 +16,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [tab, setTab] = useState<'avail' | 'blog'>('avail');
 
-  // Login form
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // Login form — pre-llenado para acceso demo (cambiar la clave en producción)
+  const [email, setEmail] = useState('dmcruz1990@gmail.com');
+  const [password, setPassword] = useState('1234');
   const [authMsg, setAuthMsg] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -66,6 +66,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
             </div>
             <h1 className="text-2xl font-black text-gray-900">Panel Beto Tours</h1>
             <p className="text-gray-500 text-sm mt-1">Acceso solo para administradores</p>
+          </div>
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded-xl p-3 mb-4 text-center">
+            <i className="fa-solid fa-circle-info mr-1"></i> Acceso demo precargado. Solo presiona <b>Entrar</b>.
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <input type="email" required placeholder="Correo" value={email} onChange={e => setEmail(e.target.value)}
