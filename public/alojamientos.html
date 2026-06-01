@@ -81,6 +81,12 @@
   .card:hover .card-img img{transform:scale(1.07)}
   .badge{position:absolute;top:12px;left:12px;background:var(--navy);color:#fff;font-size:.68rem;font-weight:700;letter-spacing:.6px;padding:6px 11px;border-radius:7px;box-shadow:0 4px 10px rgba(0,0,0,.25)}
   .badge-cat{position:absolute;top:12px;right:12px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-size:.64rem;font-weight:800;letter-spacing:.6px;padding:6px 11px;border-radius:7px;box-shadow:0 4px 12px rgba(245,176,39,.5)}
+  .badge-status{position:absolute;bottom:12px;left:12px;display:inline-flex;align-items:center;gap:5px;font-size:.66rem;font-weight:800;letter-spacing:.5px;padding:6px 11px;border-radius:30px;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+  .badge-status.free{background:#fff;color:var(--green-dark)}
+  .badge-status.busy{background:#ef4444;color:#fff}
+  .badge-status .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .card.is-busy .card-img img{filter:grayscale(.7) brightness(.9)}
+  .card.is-busy .btn-reserve{opacity:.5;pointer-events:none}
   .card-body{padding:16px 18px 20px;display:flex;flex-direction:column;flex:1}
   .specs{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:13px}
   .spec{display:flex;align-items:center;gap:6px;font-size:.78rem;color:#475569;font-weight:500}
@@ -292,6 +298,28 @@
   const WHATSAPP = "573006054141"; // WhatsApp Aparta Suites Torre de Prado
   const B = "https://apartasuitestorredeprado.com/wp-content/uploads/2024/12/";
 
+  // ===== SUPABASE (disponibilidad gestionada desde el panel admin) =====
+  const SB_URL = "https://evodmxqehoyjfkiulrwf.supabase.co";
+  const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2b2RteHFlaG95amZraXVscndmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjg3ODksImV4cCI6MjA5NTkwNDc4OX0.OOPmj5K_MP4kjjQshsbNZoBf1WNykLtBHugxl56WYrc";
+  // mapa { ref_id: is_available }. Vacío hasta que carguen los datos (se asume disponible).
+  let availability = {};
+  // El ref_id es el número del apartamento (301, 601...). Lo extraemos del nombre.
+  function refOf(stay){ const m = stay.name.match(/\d{3}/); return m ? m[0] : stay.name; }
+
+  async function loadAvailability(){
+    try{
+      const res = await fetch(`${SB_URL}/rest/v1/availability?kind=eq.stay&select=ref_id,is_available`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+      });
+      if(!res.ok) return;
+      const rows = await res.json();
+      const map = {};
+      rows.forEach(r => { map[r.ref_id] = r.is_available; });
+      availability = map;
+      render();
+    }catch(e){ /* si falla, se muestran todos como disponibles */ }
+  }
+
   const stays = [
     {name:"Aparta Suite 301", cat:"Aparta Suite", guests:4, bed:"Cama 1.40", price:"150.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-10.37.31_9f0aa777-992x935.jpg", amen:["Cocina","Baño privado","Sofá cama","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-301"},
     {name:"Aparta Suite 302", cat:"Aparta Suite", guests:4, bed:"Cama 1.40", price:"130.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-10.45.32_7b7db9ac-992x992.jpg", amen:["Cocina","Baño privado","Sofá cama","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-302"},
@@ -332,14 +360,17 @@
 
   function render(){
     const list = activeFilter==="Todos" ? stays : stays.filter(s=>s.cat===activeFilter);
-    document.getElementById('grid').innerHTML = list.map(s=>`
-      <div class="card">
+    document.getElementById('grid').innerHTML = list.map(s=>{
+      const busy = availability[refOf(s)] === false; // solo "ocupado" si el panel lo marcó
+      return `
+      <div class="card ${busy?'is-busy':''}">
         <div class="card-img">
           <img src="${s.img}" alt="${s.name}" loading="lazy"
                onerror="this.src='https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=600&q=80'">
           <span class="badge">${s.name.toUpperCase()}</span>
           ${s.penthouse?`<span class="badge-cat"><svg viewBox="0 0 24 24" fill="#0c1a2e" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 3h14v2H5v-2z"/></svg>PENTHOUSE</span>`
             : (s.cat!=="Aparta Suite"?`<span class="badge-cat">${s.cat.toUpperCase()}</span>`:'')}
+          <span class="badge-status ${busy?'busy':'free'}"><span class="dot"></span>${busy?'OCUPADO':'DISPONIBLE'}</span>
         </div>
         <div class="card-body">
           <div class="specs">
@@ -364,13 +395,14 @@
           </button>`}
         </div>
       </div>
-    `).join('');
+    `;}).join('');
   }
 
   function toggleMenu(){ const m=document.querySelector('.menu'); m.style.display = m.style.display==='flex'?'none':'flex'; }
 
   renderFilters();
   render();
+  loadAvailability();
 </script>
 </body>
 </html>
