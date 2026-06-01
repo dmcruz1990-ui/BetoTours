@@ -10,15 +10,21 @@ const slugify = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+// Clave de acceso demo (modo local, sin Supabase). Cambiar cuando se configure auth real.
+const DEMO_PASSWORD = '12345';
+
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [tab, setTab] = useState<'avail' | 'blog'>('avail');
+  const [demo, setDemo] = useState<boolean>(() => {
+    try { return localStorage.getItem('beto_demo') === '1'; } catch { return false; }
+  });
+  const [tab, setTab] = useState<'avail' | 'rooms' | 'blog'>('rooms');
 
-  // Login form — pre-llenado para acceso demo (cambiar la clave en producción)
+  // Login form — pre-llenado para acceso demo
   const [email, setEmail] = useState('dmcruz1990@gmail.com');
-  const [password, setPassword] = useState('1234');
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const [authMsg, setAuthMsg] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -42,21 +48,35 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthLoading(true);
     setAuthMsg('');
+    // Acceso demo: si la clave coincide, entra sin Supabase (modo local).
+    if (password.trim() === DEMO_PASSWORD) {
+      try { localStorage.setItem('beto_demo', '1'); } catch {}
+      setDemo(true);
+      return;
+    }
+    // Si pusieron otra clave, intentamos login real contra Supabase.
+    setAuthLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setAuthMsg(error.message);
+    if (error) setAuthMsg(error.message + ' — (la clave demo es 12345)');
     setAuthLoading(false);
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); };
+  const handleLogout = async () => {
+    try { localStorage.removeItem('beto_demo'); } catch {}
+    setDemo(false);
+    await supabase.auth.signOut();
+  };
+
+  // ¿Tiene acceso al panel? Demo local O sesión real de admin.
+  const authed = demo || (!!session && isAdmin);
 
   if (checking) {
     return <div className="text-center py-32 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-3xl"></i></div>;
   }
 
   // ---------- LOGIN ----------
-  if (!session) {
+  if (!authed && !session) {
     return (
       <div className="max-w-md mx-auto px-4 py-20">
         <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
@@ -68,7 +88,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
             <p className="text-gray-500 text-sm mt-1">Acceso solo para administradores</p>
           </div>
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded-xl p-3 mb-4 text-center">
-            <i className="fa-solid fa-circle-info mr-1"></i> Acceso demo precargado. Solo presiona <b>Entrar</b>.
+            <i className="fa-solid fa-circle-info mr-1"></i> Acceso demo: clave <b>12345</b>. Solo presiona <b>Entrar</b>.
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <input type="email" required placeholder="Correo" value={email} onChange={e => setEmail(e.target.value)}
@@ -87,7 +107,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   }
 
   // ---------- LOGUEADO PERO NO ADMIN ----------
-  if (!isAdmin) {
+  if (!demo && session && !isAdmin) {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center">
         <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
@@ -106,14 +126,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
       <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-900">Panel de administración</h1>
-          <p className="text-gray-500 text-sm">{session.user.email}</p>
+          <p className="text-gray-500 text-sm">
+            {demo ? <><i className="fa-solid fa-flask text-green-600 mr-1"></i>Modo demo (local)</> : session?.user.email}
+          </p>
         </div>
         <button onClick={handleLogout} className="px-4 py-2 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-sm">
           <i className="fa-solid fa-right-from-bracket mr-2"></i>Salir
         </button>
       </div>
 
-      <div className="flex gap-2 mb-8">
+      <div className="flex gap-2 mb-8 flex-wrap">
+        <button onClick={() => setTab('rooms')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'rooms' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-calendar-days mr-2"></i>Habitaciones
+        </button>
         <button onClick={() => setTab('avail')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-toggle-on mr-2"></i>Disponibilidad
         </button>
@@ -122,7 +147,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         </button>
       </div>
 
-      {tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
+      {tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
     </div>
   );
 };
@@ -183,6 +208,184 @@ const AvailabilityManager: React.FC = () => {
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+// ============ HABITACIONES (CALENDARIO) ============
+interface Room { id: string; name: string; guests: number; bed: string; price: string; penthouse?: boolean; }
+
+const ROOMS: Room[] = [
+  { id: '301', name: 'Aparta Suite 301', guests: 4, bed: 'Cama 1.40', price: '150.000' },
+  { id: '302', name: 'Aparta Suite 302', guests: 4, bed: 'Cama 1.40', price: '130.000' },
+  { id: '303', name: 'Aparta Suite 303', guests: 3, bed: 'Cama 1.40', price: '110.000' },
+  { id: '401', name: 'Aparta Suite 401', guests: 6, bed: 'Cama 1.60', price: '160.000' },
+  { id: '402', name: 'Aparta Suite 402', guests: 6, bed: 'Cama 1.40', price: '160.000' },
+  { id: '403', name: 'Aparta Suite 403', guests: 3, bed: 'Cama Doble', price: '110.000' },
+  { id: '501', name: 'Aparta Suite 501', guests: 7, bed: 'Cama 1.60', price: '170.000' },
+  { id: '502', name: 'Aparta Suite 502', guests: 5, bed: 'Cama 1.40', price: '150.000' },
+  { id: '504', name: 'Aparta Suite 504', guests: 6, bed: 'Cama 1.40', price: '160.000' },
+  { id: '601', name: 'Penthouse 601', guests: 9, bed: 'Cama 1.40', price: '170.000', penthouse: true },
+];
+
+const AYENDA_BASE = 'https://engine.ayenda.co/aparta-suites-torre-de-prado-';
+const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const WEEKDAYS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+const ymd = (y: number, m: number, d: number) =>
+  `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+type CalendarData = Record<string, string[]>; // { roomId: ['2026-06-15', ...] }
+
+const loadCalendar = (): CalendarData => {
+  try { return JSON.parse(localStorage.getItem('beto_room_calendar') || '{}'); } catch { return {}; }
+};
+
+const RoomsCalendar: React.FC = () => {
+  const [roomId, setRoomId] = useState<string>(ROOMS[0].id);
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth()); // 0-11
+  const [cal, setCal] = useState<CalendarData>(loadCalendar);
+
+  const room = ROOMS.find(r => r.id === roomId)!;
+  const busyDays = cal[roomId] || [];
+
+  const persist = (next: CalendarData) => {
+    setCal(next);
+    try { localStorage.setItem('beto_room_calendar', JSON.stringify(next)); } catch {}
+  };
+
+  const toggleDay = (dateStr: string) => {
+    const current = cal[roomId] || [];
+    const next = current.includes(dateStr)
+      ? current.filter(d => d !== dateStr)
+      : [...current, dateStr];
+    persist({ ...cal, [roomId]: next });
+  };
+
+  const prevMonth = () => {
+    if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1);
+  };
+
+  // Construir la grilla del mes (semana empieza lunes)
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = lunes
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  const isToday = (d: number) =>
+    d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+  const isPast = (d: number) => new Date(year, month, d) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const busyThisMonth = busyDays.filter(d => d.startsWith(ymd(year, month, 1).slice(0, 7))).length;
+
+  const clearMonth = () => {
+    const prefix = ymd(year, month, 1).slice(0, 7);
+    persist({ ...cal, [roomId]: busyDays.filter(d => !d.startsWith(prefix)) });
+  };
+
+  return (
+    <div className="grid lg:grid-cols-[260px_1fr] gap-6">
+      {/* Selector de habitaciones */}
+      <div>
+        <h2 className="text-sm font-black text-gray-500 uppercase tracking-wide mb-3">Habitaciones</h2>
+        <div className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0">
+          {ROOMS.map(r => {
+            const occupied = (cal[r.id] || []).length;
+            const active = r.id === roomId;
+            return (
+              <button key={r.id} onClick={() => setRoomId(r.id)}
+                className={`flex items-center justify-between gap-2 px-4 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition border ${active ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-100 hover:border-green-300'}`}>
+                <span className="flex items-center gap-2">
+                  <i className={`fa-solid ${r.penthouse ? 'fa-crown' : 'fa-door-closed'} text-xs`}></i>
+                  {r.name}
+                </span>
+                {occupied > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${active ? 'bg-white/25' : 'bg-red-100 text-red-600'}`}>{occupied}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Calendario */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        {/* Info de la habitación */}
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-5 pb-5 border-b border-gray-100">
+          <div>
+            <p className="text-lg font-black text-gray-900">{room.name}</p>
+            <p className="text-xs text-gray-500">
+              <i className="fa-solid fa-user mr-1"></i>{room.guests} huéspedes · {room.bed} · <b className="text-green-700">${room.price}</b>/noche
+            </p>
+          </div>
+          <a href={AYENDA_BASE + room.id} target="_blank" rel="noopener noreferrer"
+            className="text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 px-3 py-2 rounded-lg inline-flex items-center gap-1">
+            <i className="fa-solid fa-arrow-up-right-from-square"></i>Reserva Ayenda
+          </a>
+        </div>
+
+        {/* Navegación de mes */}
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={prevMonth} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600">
+            <i className="fa-solid fa-chevron-left"></i>
+          </button>
+          <p className="font-black text-gray-800">{MONTHS_ES[month]} {year}</p>
+          <button onClick={nextMonth} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600">
+            <i className="fa-solid fa-chevron-right"></i>
+          </button>
+        </div>
+
+        {/* Encabezado días */}
+        <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+          {WEEKDAYS_ES.map(d => <div key={d} className="text-center text-[11px] font-bold text-gray-400 py-1">{d}</div>)}
+        </div>
+
+        {/* Grilla */}
+        <div className="grid grid-cols-7 gap-1.5">
+          {cells.map((d, i) => {
+            if (d === null) return <div key={i} />;
+            const dateStr = ymd(year, month, d);
+            const busy = busyDays.includes(dateStr);
+            return (
+              <button key={i} onClick={() => toggleDay(dateStr)}
+                className={`aspect-square rounded-lg text-sm font-bold transition relative flex items-center justify-center
+                  ${busy ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-50 text-green-700 hover:bg-green-100'}
+                  ${isToday(d) ? 'ring-2 ring-green-600' : ''}
+                  ${isPast(d) && !busy ? 'opacity-50' : ''}`}>
+                {d}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Leyenda + resumen */}
+        <div className="flex items-center justify-between flex-wrap gap-3 mt-5 pt-4 border-t border-gray-100 text-xs">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-50 border border-green-200"></span>Disponible</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500"></span>Ocupado</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-gray-500"><b className="text-red-500">{busyThisMonth}</b> días ocupados este mes</span>
+            {busyThisMonth > 0 && (
+              <button onClick={clearMonth} className="text-gray-400 hover:text-red-500 font-bold">
+                <i className="fa-solid fa-eraser mr-1"></i>Limpiar mes
+              </button>
+            )}
+          </div>
+        </div>
+
+        <p className="text-[11px] text-gray-400 mt-4 text-center">
+          <i className="fa-solid fa-circle-info mr-1"></i>
+          Toca un día para marcarlo ocupado o libre. Se guarda en este navegador (modo demo).
+        </p>
+      </div>
     </div>
   );
 };
