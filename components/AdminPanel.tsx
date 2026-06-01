@@ -401,10 +401,17 @@ const mapSource = (s: string): Reservation['source'] => {
 
 interface ParsedRow { ok: boolean; reason?: string; r?: any; raw: string; }
 
+// Hash simple y estable (para repartir habitaciones de forma "aleatoria" pero consistente)
+const hashStr = (s: string): number => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+  return Math.abs(h);
+};
+const RANDOM_ROOM = '__random__';
+
 // Parser robusto del formato Ayenda/Booking. Detecta cada campo por su contenido
 // (no por posición), así soporta filas sin email donde las columnas se corren.
 const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
-  const room = roomById(roomId);
   return text.split(/\r?\n/).map(line => line.trimEnd()).filter(l => l.trim() !== '').map((raw): ParsedRow => {
     const cols = (raw.includes('\t') ? raw.split('\t') : raw.split(/\s*[;,]\s*/)).map(s => s.trim());
     const idCell = cols[0] || '';
@@ -421,10 +428,15 @@ const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
     const statusCell = cols.find(c => /^(ok|cancel|pend|confirm)/i.test(c)) || '';
     const channelCell = cols.find(c => /booking|airbnb|expedia|despegar|ayenda|whats|web|directo|trivago|hotel/i.test(c)) || '';
     const moneyCell = cols.find(c => /\$/.test(c) && (parseMoney(c) || 0) > 0) || '';
+    // Asignación de habitación: fija, o "aleatoria" estable según la reserva (temporal)
+    const isRandom = roomId === RANDOM_ROOM;
+    const rid = isRandom ? ROOMS[hashStr(idCell + name) % ROOMS.length].id : roomId;
+    const room = roomById(rid);
+    const refNote = idCell && /^\d+$/.test(idCell) ? `Ref ${idCell}${channelCell ? ' · ' + channelCell : ''}` : null;
     return {
       ok: true, raw,
       r: {
-        room_id: roomId, room_name: room?.name || roomId,
+        room_id: rid, room_name: room?.name || rid,
         guest_name: name,
         guest_email: email,
         guest_phone: phone,
@@ -433,7 +445,7 @@ const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
         status: mapStatus(statusCell),
         source: mapSource(channelCell),
         total: parseMoney(moneyCell),
-        note: idCell && /^\d+$/.test(idCell) ? `Ref ${idCell}${channelCell ? ' · ' + channelCell : ''}` : null,
+        note: isRandom ? `${refNote ? refNote + ' · ' : ''}⚠️ habitación temporal` : refNote,
       },
     };
   });
@@ -441,7 +453,7 @@ const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
 
 const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ onDone, onCancel }) => {
   const [text, setText] = useState('');
-  const [roomId, setRoomId] = useState(ROOMS[0].id);
+  const [roomId, setRoomId] = useState(RANDOM_ROOM);
   const [includeCancelled, setIncludeCancelled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
@@ -468,8 +480,9 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
       <p className="text-gray-500 text-sm mb-5">Copia las filas de tu Excel de Ayenda/Booking y pégalas aquí. Reconoce el formato: <b>Reserva, Cliente, email, teléfono, asesor, Desde, Hasta, noches, habitación, valor, canal, comisión, estado</b>.</p>
 
       <div className="grid sm:grid-cols-2 gap-4 mb-4">
-        <label className="text-sm font-bold text-gray-600 flex flex-col gap-1">Asignar todas a la habitación
+        <label className="text-sm font-bold text-gray-600 flex flex-col gap-1">Asignar a la habitación
           <select value={roomId} onChange={e => setRoomId(e.target.value)} className={inp + ' font-normal'}>
+            <option value={RANDOM_ROOM}>🎲 Aleatorio (temporal)</option>
             {ROOMS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </label>
@@ -486,7 +499,7 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
       {parsed.length > 0 && (
         <div className="mt-4 text-sm bg-gray-50 rounded-xl p-4">
           <p className="font-bold text-gray-700 mb-2">Vista previa:</p>
-          <p className="text-gray-600">✅ <b>{toImport.length}</b> reservas se importarán a <b>{roomById(roomId)?.name}</b>.</p>
+          <p className="text-gray-600">✅ <b>{toImport.length}</b> reservas se importarán {roomId === RANDOM_ROOM ? <b>repartidas al azar (temporal)</b> : <>a <b>{roomById(roomId)?.name}</b></>}.</p>
           {!includeCancelled && valid.some(p => p.r.status === 'cancelled') &&
             <p className="text-gray-400 text-xs mt-1">({valid.filter(p => p.r.status === 'cancelled').length} canceladas omitidas — marca la casilla para incluirlas)</p>}
           {skipped.length > 0 && <p className="text-amber-600 text-xs mt-1">⚠️ {skipped.length} líneas no se pudieron leer (revisa fechas/formato).</p>}
@@ -494,7 +507,7 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
             {toImport.slice(0, 8).map((p, i) => (
               <div key={i} className="text-xs text-gray-600 flex gap-2">
                 <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${STATUS_META[p.r.status as ReservationStatus].dot}`}></span>
-                <span>{p.r.guest_name} · {fmtDate(p.r.check_in)}→{fmtDate(p.r.check_out)} · {SOURCE_LABEL[p.r.source]} · {STATUS_META[p.r.status as ReservationStatus].label}</span>
+                <span><b>{p.r.room_name}</b> · {p.r.guest_name} · {fmtDate(p.r.check_in)}→{fmtDate(p.r.check_out)} · {SOURCE_LABEL[p.r.source]} · {STATUS_META[p.r.status as ReservationStatus].label}</span>
               </div>
             ))}
             {toImport.length > 8 && <p className="text-xs text-gray-400">…y {toImport.length - 8} más.</p>}
