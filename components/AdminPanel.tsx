@@ -20,7 +20,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [demo, setDemo] = useState<boolean>(() => {
     try { return localStorage.getItem('beto_demo') === '1'; } catch { return false; }
   });
-  const [tab, setTab] = useState<'reservas' | 'board' | 'rooms' | 'avail' | 'blog'>('reservas');
+  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'blog'>('inicio');
 
   // Login form — pre-llenado para acceso demo
   const [email, setEmail] = useState('dmcruz1990@gmail.com');
@@ -136,6 +136,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
       </div>
 
       <div className="flex gap-2 mb-8 flex-wrap">
+        <button onClick={() => setTab('inicio')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'inicio' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-house mr-2"></i>Inicio
+        </button>
         <button onClick={() => setTab('reservas')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'reservas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-bell-concierge mr-2"></i>Reservas
         </button>
@@ -153,7 +156,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         </button>
       </div>
 
-      {tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
+      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
     </div>
   );
 };
@@ -367,6 +370,143 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
         </button>
         <button onClick={onCancel} className="px-6 py-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200">Cancelar</button>
       </div>
+    </div>
+  );
+};
+
+// ============ INICIO (resumen para el hotelero) ============
+const money = (n: number | null | undefined) => '$' + (n || 0).toLocaleString('es-CO');
+const fullDate = (s: string) => { const d = new Date(s + 'T00:00:00'); return `${WEEKDAYS_ES[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0, 3).toLowerCase()}`; };
+
+const GuestRow: React.FC<{ r: Reservation }> = ({ r }) => {
+  const phone = (r.guest_phone || '').replace(/\D/g, '');
+  const meta = STATUS_META[r.status];
+  return (
+    <div className="flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0">
+      <div className="min-w-0">
+        <p className="font-bold text-gray-800 truncate">{r.guest_name}</p>
+        <p className="text-xs text-gray-500">
+          <i className="fa-solid fa-door-open mr-1"></i>{r.room_name || r.room_id}
+          <span className="mx-1.5 text-gray-300">·</span>{fmtDate(r.check_in)} → {fmtDate(r.check_out)}
+          <span className="mx-1.5 text-gray-300">·</span>{r.nights || ''} noche{(r.nights || 0) === 1 ? '' : 's'}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.chip}`}>{meta.label}</span>
+        {phone && <a href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm"><i className="fa-brands fa-whatsapp"></i></a>}
+      </div>
+    </div>
+  );
+};
+
+const Dashboard: React.FC<{ onGoImport: () => void }> = ({ onGoImport }) => {
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('reservations').select('*').neq('status', 'cancelled');
+    if (error && isMissingTable(error)) { setMissing(true); setReservations([]); }
+    else { setMissing(false); setReservations((data as Reservation[]) || []); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const ch = supabase.channel('dash-stream')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
+
+  const today = todayStr();
+  const monthPrefix = today.slice(0, 7);
+  const arrivals = reservations.filter(r => r.check_in === today).sort((a, b) => a.room_id.localeCompare(b.room_id));
+  const departures = reservations.filter(r => r.check_out === today);
+  const inHouse = reservations.filter(r => r.check_in <= today && r.check_out > today);
+  const upcoming = reservations.filter(r => r.check_in > today).sort((a, b) => a.check_in.localeCompare(b.check_in)).slice(0, 6);
+  const monthRevenue = reservations.filter(r => r.status === 'confirmed' && r.check_in.startsWith(monthPrefix)).reduce((s, r) => s + (r.total || 0), 0);
+  const occPct = Math.round((inHouse.length / ROOMS.length) * 100);
+
+  const cards = [
+    { icon: 'fa-plane-arrival', color: 'bg-green-100 text-green-700', label: 'Llegadas hoy', value: arrivals.length },
+    { icon: 'fa-plane-departure', color: 'bg-blue-100 text-blue-700', label: 'Salidas hoy', value: departures.length },
+    { icon: 'fa-bed', color: 'bg-purple-100 text-purple-700', label: 'Alojados hoy', value: inHouse.length },
+    { icon: 'fa-sack-dollar', color: 'bg-amber-100 text-amber-700', label: 'Ingresos del mes', value: money(monthRevenue), small: true },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {missing && <SetupBanner />}
+
+      {/* Saludo */}
+      <div>
+        <h2 className="text-xl font-black text-gray-900">¡Hola, Beto! 👋</h2>
+        <p className="text-gray-500 text-sm capitalize">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+      </div>
+
+      {/* Tarjetas resumen */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {cards.map(c => (
+          <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${c.color}`}><i className={`fa-solid ${c.icon}`}></i></div>
+            <p className={`font-black text-gray-900 ${c.small ? 'text-lg' : 'text-3xl'}`}>{c.value}</p>
+            <p className="text-xs text-gray-500 font-bold">{c.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Ocupación de hoy */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-2">
+          <p className="font-black text-gray-800">Ocupación de hoy</p>
+          <p className="font-black text-green-600">{inHouse.length} / {ROOMS.length} <span className="text-gray-400 font-bold text-sm">({occPct}%)</span></p>
+        </div>
+        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${occPct}%` }}></div>
+        </div>
+      </div>
+
+      {reservations.length === 0 && !missing && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-5 text-sm flex items-center justify-between gap-3 flex-wrap">
+          <span><i className="fa-solid fa-circle-info mr-1"></i>Todavía no tienes reservas cargadas.</span>
+          <button onClick={onGoImport} className="font-bold bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700">Cargar reservas</button>
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Llegadas de hoy */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <h3 className="font-black text-gray-800 mb-3"><i className="fa-solid fa-plane-arrival text-green-600 mr-2"></i>Llegan hoy</h3>
+          {arrivals.length === 0 ? <p className="text-gray-400 text-sm py-6 text-center">Sin llegadas para hoy.</p>
+            : arrivals.map(r => <GuestRow key={r.id} r={r} />)}
+        </div>
+
+        {/* Próximas llegadas */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <h3 className="font-black text-gray-800 mb-3"><i className="fa-solid fa-calendar-check text-blue-600 mr-2"></i>Próximas llegadas</h3>
+          {upcoming.length === 0 ? <p className="text-gray-400 text-sm py-6 text-center">No hay reservas próximas.</p>
+            : upcoming.map(r => (
+              <div key={r.id} className="flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0">
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-800 truncate">{r.guest_name}</p>
+                  <p className="text-xs text-gray-500"><i className="fa-solid fa-door-open mr-1"></i>{r.room_name || r.room_id} <span className="mx-1 text-gray-300">·</span>{r.nights || ''} noche{(r.nights || 0) === 1 ? '' : 's'}</p>
+                </div>
+                <span className="text-xs font-bold text-gray-600 flex-shrink-0">{fullDate(r.check_in)}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Salidas de hoy */}
+      {departures.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <h3 className="font-black text-gray-800 mb-3"><i className="fa-solid fa-plane-departure text-blue-600 mr-2"></i>Salen hoy (hacer aseo)</h3>
+          {departures.map(r => <GuestRow key={r.id} r={r} />)}
+        </div>
+      )}
     </div>
   );
 };
