@@ -371,6 +371,150 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
   );
 };
 
+// ============ IMPORTADOR (pegar Excel/CSV de Ayenda/Booking) ============
+// Convierte una fecha DD/MM/AAAA a AAAA-MM-DD
+const parseDate = (s: string): string | null => {
+  const m = (s || '').trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const yr = y.length === 2 ? '20' + y : y;
+  return `${yr}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+};
+const parseMoney = (s: string): number | null => {
+  const n = (s || '').replace(/[^\d]/g, '');
+  return n ? Number(n) : null;
+};
+const mapStatus = (s: string): ReservationStatus => {
+  const v = (s || '').toLowerCase();
+  if (/cancel/.test(v)) return 'cancelled';
+  if (/ok|confirm/.test(v)) return 'confirmed';
+  if (/pend/.test(v)) return 'pending';
+  return 'confirmed';
+};
+const mapSource = (s: string): Reservation['source'] => {
+  const v = (s || '').toLowerCase();
+  if (/booking|airbnb|expedia|despegar|hotel|ayenda|trivago/.test(v)) return 'externo';
+  if (/whats/.test(v)) return 'whatsapp';
+  if (/web|directo|p[aá]gina/.test(v)) return 'web';
+  return 'externo';
+};
+
+interface ParsedRow { ok: boolean; reason?: string; r?: any; raw: string; }
+
+// Parser robusto del formato Ayenda/Booking. Detecta cada campo por su contenido
+// (no por posición), así soporta filas sin email donde las columnas se corren.
+const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
+  const room = roomById(roomId);
+  return text.split(/\r?\n/).map(line => line.trimEnd()).filter(l => l.trim() !== '').map((raw): ParsedRow => {
+    const cols = (raw.includes('\t') ? raw.split('\t') : raw.split(/\s*[;,]\s*/)).map(s => s.trim());
+    const idCell = cols[0] || '';
+    // Saltar encabezado
+    if (/^reserva$/i.test(idCell) || (/cliente/i.test(cols[1] || '') && /desde|hasta|estado/i.test(raw.toLowerCase()))) {
+      return { ok: false, reason: 'encabezado', raw };
+    }
+    const name = cols[1] || '';
+    const dates = cols.map(parseDate).filter(Boolean) as string[];
+    if (!name) return { ok: false, reason: 'sin nombre', raw };
+    if (dates.length < 2) return { ok: false, reason: 'fechas inválidas', raw };
+    const email = cols.find(c => /@/.test(c)) || null;
+    const phone = cols.find((c, i) => i > 0 && c !== idCell && !/@/.test(c) && !parseDate(c) && /^\+?\d[\d\s\-]{6,}$/.test(c)) || null;
+    const statusCell = cols.find(c => /^(ok|cancel|pend|confirm)/i.test(c)) || '';
+    const channelCell = cols.find(c => /booking|airbnb|expedia|despegar|ayenda|whats|web|directo|trivago|hotel/i.test(c)) || '';
+    const moneyCell = cols.find(c => /\$/.test(c) && (parseMoney(c) || 0) > 0) || '';
+    return {
+      ok: true, raw,
+      r: {
+        room_id: roomId, room_name: room?.name || roomId,
+        guest_name: name,
+        guest_email: email,
+        guest_phone: phone,
+        check_in: dates[0], check_out: dates[1],
+        guests: 1,
+        status: mapStatus(statusCell),
+        source: mapSource(channelCell),
+        total: parseMoney(moneyCell),
+        note: idCell && /^\d+$/.test(idCell) ? `Ref ${idCell}${channelCell ? ' · ' + channelCell : ''}` : null,
+      },
+    };
+  });
+};
+
+const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ onDone, onCancel }) => {
+  const [text, setText] = useState('');
+  const [roomId, setRoomId] = useState(ROOMS[0].id);
+  const [includeCancelled, setIncludeCancelled] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState('');
+
+  const parsed = text.trim() ? parseAyenda(text, roomId) : [];
+  const valid = parsed.filter(p => p.ok);
+  const toImport = valid.filter(p => includeCancelled || p.r.status !== 'cancelled');
+  const skipped = parsed.filter(p => !p.ok && p.reason !== 'encabezado');
+
+  const doImport = async () => {
+    if (toImport.length === 0) return;
+    setSaving(true); setResult('');
+    const rows = toImport.map(p => p.r);
+    const { error } = await supabase.from('reservations').insert(rows);
+    setSaving(false);
+    if (error) { setResult((isMissingTable(error) ? MISSING_TABLE_MSG : error.message)); return; }
+    onDone();
+  };
+
+  const inp = 'p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none';
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-3xl">
+      <h2 className="text-xl font-black mb-1">Importar reservas</h2>
+      <p className="text-gray-500 text-sm mb-5">Copia las filas de tu Excel de Ayenda/Booking y pégalas aquí. Reconoce el formato: <b>Reserva, Cliente, email, teléfono, asesor, Desde, Hasta, noches, habitación, valor, canal, comisión, estado</b>.</p>
+
+      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+        <label className="text-sm font-bold text-gray-600 flex flex-col gap-1">Asignar todas a la habitación
+          <select value={roomId} onChange={e => setRoomId(e.target.value)} className={inp + ' font-normal'}>
+            {ROOMS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-bold text-gray-600 flex items-end gap-2 pb-3">
+          <input type="checkbox" checked={includeCancelled} onChange={e => setIncludeCancelled(e.target.checked)} className="w-5 h-5 accent-green-600" />
+          Incluir reservas canceladas
+        </label>
+      </div>
+
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={10}
+        placeholder="Pega aquí las filas copiadas del Excel…"
+        className={'w-full font-mono text-xs ' + inp + ' resize-y'} />
+
+      {parsed.length > 0 && (
+        <div className="mt-4 text-sm bg-gray-50 rounded-xl p-4">
+          <p className="font-bold text-gray-700 mb-2">Vista previa:</p>
+          <p className="text-gray-600">✅ <b>{toImport.length}</b> reservas se importarán a <b>{roomById(roomId)?.name}</b>.</p>
+          {!includeCancelled && valid.some(p => p.r.status === 'cancelled') &&
+            <p className="text-gray-400 text-xs mt-1">({valid.filter(p => p.r.status === 'cancelled').length} canceladas omitidas — marca la casilla para incluirlas)</p>}
+          {skipped.length > 0 && <p className="text-amber-600 text-xs mt-1">⚠️ {skipped.length} líneas no se pudieron leer (revisa fechas/formato).</p>}
+          <div className="mt-3 max-h-40 overflow-auto space-y-1">
+            {toImport.slice(0, 8).map((p, i) => (
+              <div key={i} className="text-xs text-gray-600 flex gap-2">
+                <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${STATUS_META[p.r.status as ReservationStatus].dot}`}></span>
+                <span>{p.r.guest_name} · {fmtDate(p.r.check_in)}→{fmtDate(p.r.check_out)} · {SOURCE_LABEL[p.r.source]} · {STATUS_META[p.r.status as ReservationStatus].label}</span>
+              </div>
+            ))}
+            {toImport.length > 8 && <p className="text-xs text-gray-400">…y {toImport.length - 8} más.</p>}
+          </div>
+        </div>
+      )}
+
+      {result && <p className="text-red-500 text-sm mt-4 bg-red-50 border border-red-100 rounded-lg p-3">{result}</p>}
+
+      <div className="flex gap-3 pt-5">
+        <button onClick={doImport} disabled={saving || toImport.length === 0}
+          className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-50">
+          {saving ? 'Importando…' : `Importar ${toImport.length || ''} reservas`}
+        </button>
+        <button onClick={onCancel} className="px-6 py-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200">Cancelar</button>
+      </div>
+    </div>
+  );
+};
+
 // ============ RESERVAS (CRM / bandeja) ============
 const SetupBanner: React.FC = () => (
   <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-5 mb-6 text-sm">
@@ -385,6 +529,7 @@ const ReservationsManager: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [filter, setFilter] = useState<'all' | ReservationStatus>('all');
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
+  const [importing, setImporting] = useState(false);
   const [live, setLive] = useState(false);
   const [newId, setNewId] = useState<string | null>(null);
 
@@ -434,6 +579,7 @@ const ReservationsManager: React.FC = () => {
   };
 
   if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
+  if (importing) return <ImportPanel onDone={() => { setImporting(false); load(); }} onCancel={() => setImporting(false)} />;
   if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
 
   const counts = {
@@ -472,9 +618,14 @@ const ReservationsManager: React.FC = () => {
             </button>
           ))}
         </div>
-        <button onClick={() => setEditing(blankReservation())} className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 text-sm">
-          <i className="fa-solid fa-plus mr-2"></i>Nueva reserva
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setImporting(true)} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 text-sm">
+            <i className="fa-solid fa-file-import mr-2"></i>Importar
+          </button>
+          <button onClick={() => setEditing(blankReservation())} className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 text-sm">
+            <i className="fa-solid fa-plus mr-2"></i>Nueva reserva
+          </button>
+        </div>
       </div>
 
       {shown.length === 0 ? (
