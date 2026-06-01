@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase, BlogPost, AvailabilityItem } from '../lib/supabase';
+import { supabase, BlogPost, AvailabilityItem, Reservation, ReservationStatus } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface AdminPanelProps {
@@ -20,7 +20,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [demo, setDemo] = useState<boolean>(() => {
     try { return localStorage.getItem('beto_demo') === '1'; } catch { return false; }
   });
-  const [tab, setTab] = useState<'avail' | 'rooms' | 'blog'>('rooms');
+  const [tab, setTab] = useState<'reservas' | 'rooms' | 'avail' | 'blog'>('reservas');
 
   // Login form — pre-llenado para acceso demo
   const [email, setEmail] = useState('dmcruz1990@gmail.com');
@@ -136,8 +136,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
       </div>
 
       <div className="flex gap-2 mb-8 flex-wrap">
+        <button onClick={() => setTab('reservas')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'reservas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-bell-concierge mr-2"></i>Reservas
+        </button>
         <button onClick={() => setTab('rooms')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'rooms' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
-          <i className="fa-solid fa-calendar-days mr-2"></i>Habitaciones
+          <i className="fa-solid fa-calendar-days mr-2"></i>Calendario
         </button>
         <button onClick={() => setTab('avail')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-toggle-on mr-2"></i>Disponibilidad
@@ -147,7 +150,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         </button>
       </div>
 
-      {tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
+      {tab === 'reservas' ? <ReservationsManager /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
     </div>
   );
 };
@@ -235,156 +238,381 @@ const WEEKDAYS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const ymd = (y: number, m: number, d: number) =>
   `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
-type CalendarData = Record<string, string[]>; // { roomId: ['2026-06-15', ...] }
-
-const loadCalendar = (): CalendarData => {
-  try { return JSON.parse(localStorage.getItem('beto_room_calendar') || '{}'); } catch { return {}; }
+const roomById = (id: string) => ROOMS.find(r => r.id === id);
+const todayStr = () => { const t = new Date(); return ymd(t.getFullYear(), t.getMonth(), t.getDate()); };
+const fmtDate = (s: string) => { const d = new Date(s + 'T00:00:00'); return `${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0, 3).toLowerCase()}`; };
+const addDaysStr = (s: string, n: number) => {
+  const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n);
+  return ymd(d.getFullYear(), d.getMonth(), d.getDate());
+};
+// Noches ocupadas [check_in, check_out) como array de 'YYYY-MM-DD'
+const nightsBetween = (checkIn: string, checkOut: string): string[] => {
+  const out: string[] = [];
+  const d = new Date(checkIn + 'T00:00:00');
+  const end = new Date(checkOut + 'T00:00:00');
+  while (d < end) { out.push(ymd(d.getFullYear(), d.getMonth(), d.getDate())); d.setDate(d.getDate() + 1); }
+  return out;
 };
 
+const STATUS_META: Record<ReservationStatus, { label: string; chip: string; dot: string; cell: string }> = {
+  pending:   { label: 'Pendiente',  chip: 'text-amber-700 bg-amber-50 border-amber-200', dot: 'bg-amber-500', cell: 'bg-amber-400 text-white hover:bg-amber-500' },
+  confirmed: { label: 'Confirmada', chip: 'text-green-700 bg-green-50 border-green-200', dot: 'bg-green-500', cell: 'bg-red-500 text-white hover:bg-red-600' },
+  cancelled: { label: 'Cancelada',  chip: 'text-gray-400 bg-gray-100 border-gray-200',  dot: 'bg-gray-400', cell: '' },
+};
+const SOURCE_LABEL: Record<string, string> = { web: 'Web', whatsapp: 'WhatsApp', ayenda: 'Ayenda', manual: 'Manual' };
+
+// ¿El error de Supabase indica que falta la tabla reservations?
+const isMissingTable = (err: any) => {
+  if (!err) return false;
+  const msg = (err.message || '') + ' ' + (err.details || '') + ' ' + (err.hint || '');
+  return err.code === '42P01' || err.code === 'PGRST205' || /relation .*reservations.* does not exist/i.test(msg) || (/reservations/i.test(msg) && /schema cache|not exist|could not find/i.test(msg));
+};
+
+const MISSING_TABLE_MSG = 'Falta crear la tabla en Supabase. Corre el SQL de supabase/migrations/0001_reservations_crm.sql en el editor SQL de Supabase.';
+
+const blankReservation = (over: Partial<Reservation> = {}): Partial<Reservation> => ({
+  room_id: ROOMS[0].id, guest_name: '', guest_phone: '', guest_email: '',
+  check_in: todayStr(), check_out: addDaysStr(todayStr(), 1), guests: 1,
+  status: 'pending', source: 'manual', note: '', ...over,
+});
+
+// ============ FORMULARIO DE RESERVA (compartido) ============
+const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => void; onCancel: () => void; }> = ({ initial, onSaved, onCancel }) => {
+  const [f, setF] = useState<Partial<Reservation>>(initial);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k: keyof Reservation, v: any) => setF(p => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!f.guest_name?.trim()) { setErr('Escribe el nombre del huésped.'); return; }
+    if (!f.check_in || !f.check_out || f.check_out <= f.check_in) { setErr('Las fechas no son válidas (la salida debe ser después de la entrada).'); return; }
+    setSaving(true); setErr('');
+    const room = roomById(f.room_id || '');
+    const payload: any = {
+      room_id: f.room_id, room_name: room?.name || f.room_name || null,
+      guest_name: f.guest_name.trim(), guest_phone: f.guest_phone || null, guest_email: f.guest_email || null,
+      check_in: f.check_in, check_out: f.check_out, guests: f.guests || 1,
+      status: f.status || 'pending', source: f.source || 'manual',
+      total: f.total ?? null, note: f.note || null,
+    };
+    const { error } = f.id
+      ? await supabase.from('reservations').update(payload).eq('id', f.id)
+      : await supabase.from('reservations').insert(payload);
+    setSaving(false);
+    if (error) { setErr(isMissingTable(error) ? MISSING_TABLE_MSG : error.message); return; }
+    onSaved();
+  };
+
+  const inp = 'w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none';
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-2xl">
+      <h2 className="text-xl font-black mb-6">{f.id ? 'Editar reserva' : 'Nueva reserva'}</h2>
+      {err && <p className="text-red-500 text-sm mb-4 bg-red-50 border border-red-100 rounded-lg p-3">{err}</p>}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <label className="text-sm font-bold text-gray-600">Habitación
+          <select value={f.room_id} onChange={e => set('room_id', e.target.value)} className={inp + ' mt-1 font-normal'}>
+            {ROOMS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-bold text-gray-600">Huéspedes
+          <input type="number" min={1} max={12} value={f.guests || 1} onChange={e => set('guests', Number(e.target.value))} className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600">Entrada (check-in)
+          <input type="date" value={f.check_in} onChange={e => set('check_in', e.target.value)} className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600">Salida (check-out)
+          <input type="date" value={f.check_out} onChange={e => set('check_out', e.target.value)} className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600 sm:col-span-2">Nombre del huésped
+          <input value={f.guest_name} onChange={e => set('guest_name', e.target.value)} placeholder="Ej: Juan Pérez" className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600">Celular / WhatsApp
+          <input value={f.guest_phone || ''} onChange={e => set('guest_phone', e.target.value)} placeholder="3001234567" className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600">Correo (opcional)
+          <input type="email" value={f.guest_email || ''} onChange={e => set('guest_email', e.target.value)} className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600">Estado
+          <select value={f.status} onChange={e => set('status', e.target.value)} className={inp + ' mt-1 font-normal'}>
+            <option value="pending">Pendiente</option>
+            <option value="confirmed">Confirmada</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+        </label>
+        <label className="text-sm font-bold text-gray-600">Origen
+          <select value={f.source} onChange={e => set('source', e.target.value)} className={inp + ' mt-1 font-normal'}>
+            <option value="manual">Manual</option>
+            <option value="web">Web</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="ayenda">Ayenda</option>
+          </select>
+        </label>
+        <label className="text-sm font-bold text-gray-600 sm:col-span-2">Nota (opcional)
+          <textarea value={f.note || ''} onChange={e => set('note', e.target.value)} rows={2} className={inp + ' mt-1 font-normal resize-y'} />
+        </label>
+      </div>
+      <div className="flex gap-3 pt-5">
+        <button onClick={save} disabled={saving} className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-50">
+          {saving ? 'Guardando...' : 'Guardar reserva'}
+        </button>
+        <button onClick={onCancel} className="px-6 py-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200">Cancelar</button>
+      </div>
+    </div>
+  );
+};
+
+// ============ RESERVAS (CRM / bandeja) ============
+const SetupBanner: React.FC = () => (
+  <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-5 mb-6 text-sm">
+    <p className="font-black mb-1"><i className="fa-solid fa-database mr-2"></i>Falta activar la base de datos de reservas</p>
+    <p>Abre <b>Supabase → SQL Editor → New query</b>, pega el contenido de <code className="bg-amber-100 px-1 rounded">supabase/migrations/0001_reservations_crm.sql</code> y dale <b>Run</b>. Después recarga esta página.</p>
+  </div>
+);
+
+const ReservationsManager: React.FC = () => {
+  const [items, setItems] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+  const [filter, setFilter] = useState<'all' | ReservationStatus>('all');
+  const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('reservations').select('*').order('created_at', { ascending: false });
+    if (error && isMissingTable(error)) { setMissing(true); setItems([]); }
+    else { setMissing(false); setItems((data as Reservation[]) || []); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const setStatus = async (r: Reservation, status: ReservationStatus) => {
+    await supabase.from('reservations').update({ status }).eq('id', r.id);
+    setItems(prev => prev.map(i => i.id === r.id ? { ...i, status } : i));
+  };
+  const remove = async (r: Reservation) => {
+    if (!confirm(`¿Borrar la reserva de ${r.guest_name}?`)) return;
+    await supabase.from('reservations').delete().eq('id', r.id);
+    setItems(prev => prev.filter(i => i.id !== r.id));
+  };
+
+  if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
+  if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
+
+  const counts = {
+    all: items.length,
+    pending: items.filter(i => i.status === 'pending').length,
+    confirmed: items.filter(i => i.status === 'confirmed').length,
+    cancelled: items.filter(i => i.status === 'cancelled').length,
+  };
+  const shown = filter === 'all' ? items : items.filter(i => i.status === filter);
+  const filters: { key: 'all' | ReservationStatus; label: string }[] = [
+    { key: 'all', label: `Todas (${counts.all})` },
+    { key: 'pending', label: `Pendientes (${counts.pending})` },
+    { key: 'confirmed', label: `Confirmadas (${counts.confirmed})` },
+    { key: 'cancelled', label: `Canceladas (${counts.cancelled})` },
+  ];
+
+  return (
+    <div>
+      {missing && <SetupBanner />}
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+        <div className="flex gap-2 flex-wrap">
+          {filters.map(ff => (
+            <button key={ff.key} onClick={() => setFilter(ff.key)}
+              className={`px-4 py-2 rounded-full text-xs font-bold transition ${filter === ff.key ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {ff.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setEditing(blankReservation())} className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 text-sm">
+          <i className="fa-solid fa-plus mr-2"></i>Nueva reserva
+        </button>
+      </div>
+
+      {shown.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <i className="fa-solid fa-inbox text-4xl mb-3"></i>
+          <p className="font-bold">No hay reservas {filter !== 'all' ? STATUS_META[filter as ReservationStatus].label.toLowerCase() + 's' : 'todavía'}.</p>
+          {!missing && <p className="text-xs mt-1">Las solicitudes desde la página de alojamientos caerán aquí.</p>}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {shown.map(r => {
+            const meta = STATUS_META[r.status];
+            const phone = (r.guest_phone || '').replace(/\D/g, '');
+            return (
+              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${meta.chip}`}><span className={`inline-block w-1.5 h-1.5 rounded-full ${meta.dot} mr-1`}></span>{meta.label}</span>
+                    <span className="text-[11px] font-bold text-gray-400">{SOURCE_LABEL[r.source] || r.source}</span>
+                    <span className="text-[11px] text-gray-300">{new Date(r.created_at).toLocaleDateString('es-CO')}</span>
+                  </div>
+                  <p className="font-black text-gray-900 truncate">{r.guest_name}
+                    <span className="font-bold text-gray-400 text-sm"> · {r.room_name || r.room_id}</span>
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    <i className="fa-solid fa-calendar mr-1"></i>{fmtDate(r.check_in)} → {fmtDate(r.check_out)}
+                    {r.nights ? <span className="text-gray-400"> ({r.nights} noche{r.nights > 1 ? 's' : ''})</span> : null}
+                    <span className="mx-2 text-gray-300">·</span><i className="fa-solid fa-user mr-1"></i>{r.guests || 1}
+                    {r.guest_phone && <><span className="mx-2 text-gray-300">·</span><i className="fa-solid fa-phone mr-1"></i>{r.guest_phone}</>}
+                  </p>
+                  {r.note && <p className="text-xs text-gray-400 mt-1 italic">"{r.note}"</p>}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {phone && (
+                    <a href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" title="WhatsApp"
+                      className="px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm font-bold"><i className="fa-brands fa-whatsapp"></i></a>
+                  )}
+                  {r.status !== 'confirmed' && (
+                    <button onClick={() => setStatus(r, 'confirmed')} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-bold" title="Confirmar"><i className="fa-solid fa-check"></i></button>
+                  )}
+                  {r.status !== 'cancelled' && (
+                    <button onClick={() => setStatus(r, 'cancelled')} className="px-3 py-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 text-sm font-bold" title="Cancelar"><i className="fa-solid fa-ban"></i></button>
+                  )}
+                  <button onClick={() => setEditing(r)} className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-sm font-bold" title="Editar"><i className="fa-solid fa-pen"></i></button>
+                  <button onClick={() => remove(r)} className="px-3 py-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 text-sm font-bold" title="Borrar"><i className="fa-solid fa-trash"></i></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============ CALENDARIO POR HABITACIÓN ============
 const RoomsCalendar: React.FC = () => {
   const [roomId, setRoomId] = useState<string>(ROOMS[0].id);
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-11
-  const [cal, setCal] = useState<CalendarData>(loadCalendar);
+  const [month, setMonth] = useState(today.getMonth());
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+  const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
 
-  const room = ROOMS.find(r => r.id === roomId)!;
-  const busyDays = cal[roomId] || [];
-
-  const persist = (next: CalendarData) => {
-    setCal(next);
-    try { localStorage.setItem('beto_room_calendar', JSON.stringify(next)); } catch {}
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('reservations').select('*').neq('status', 'cancelled');
+    if (error && isMissingTable(error)) { setMissing(true); setReservations([]); }
+    else { setMissing(false); setReservations((data as Reservation[]) || []); }
+    setLoading(false);
   };
+  useEffect(() => { load(); }, []);
 
-  const toggleDay = (dateStr: string) => {
-    const current = cal[roomId] || [];
-    const next = current.includes(dateStr)
-      ? current.filter(d => d !== dateStr)
-      : [...current, dateStr];
-    persist({ ...cal, [roomId]: next });
-  };
+  const room = roomById(roomId)!;
 
-  const prevMonth = () => {
-    if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1);
-  };
-  const nextMonth = () => {
-    if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1);
-  };
+  // Mapa de noche -> reserva (de la habitación seleccionada)
+  const dayMap: Record<string, Reservation> = {};
+  reservations.filter(r => r.room_id === roomId).forEach(r => {
+    nightsBetween(r.check_in, r.check_out).forEach(d => { dayMap[d] = r; });
+  });
+  // Conteo de noches ocupadas por habitación (para los badges del selector)
+  const occByRoom: Record<string, number> = {};
+  reservations.forEach(r => {
+    occByRoom[r.room_id] = (occByRoom[r.room_id] || 0) + nightsBetween(r.check_in, r.check_out).length;
+  });
 
-  // Construir la grilla del mes (semana empieza lunes)
-  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = lunes
+  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
+
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array(firstDow).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
+  const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const isToday = (d: number) => d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
 
-  const isToday = (d: number) =>
-    d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
-  const isPast = (d: number) => new Date(year, month, d) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const busyThisMonth = Object.keys(dayMap).filter(d => d.startsWith(ymd(year, month, 1).slice(0, 7))).length;
 
-  const busyThisMonth = busyDays.filter(d => d.startsWith(ymd(year, month, 1).slice(0, 7))).length;
+  if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
 
-  const clearMonth = () => {
-    const prefix = ymd(year, month, 1).slice(0, 7);
-    persist({ ...cal, [roomId]: busyDays.filter(d => !d.startsWith(prefix)) });
+  const onDayClick = (d: number) => {
+    const dateStr = ymd(year, month, d);
+    const res = dayMap[dateStr];
+    if (res) { setEditing(res); return; }
+    setEditing(blankReservation({ room_id: roomId, check_in: dateStr, check_out: addDaysStr(dateStr, 1), source: 'manual' }));
   };
 
   return (
-    <div className="grid lg:grid-cols-[260px_1fr] gap-6">
-      {/* Selector de habitaciones */}
-      <div>
-        <h2 className="text-sm font-black text-gray-500 uppercase tracking-wide mb-3">Habitaciones</h2>
-        <div className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0">
-          {ROOMS.map(r => {
-            const occupied = (cal[r.id] || []).length;
-            const active = r.id === roomId;
-            return (
-              <button key={r.id} onClick={() => setRoomId(r.id)}
-                className={`flex items-center justify-between gap-2 px-4 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition border ${active ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-100 hover:border-green-300'}`}>
-                <span className="flex items-center gap-2">
-                  <i className={`fa-solid ${r.penthouse ? 'fa-crown' : 'fa-door-closed'} text-xs`}></i>
-                  {r.name}
-                </span>
-                {occupied > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${active ? 'bg-white/25' : 'bg-red-100 text-red-600'}`}>{occupied}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Calendario */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        {/* Info de la habitación */}
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-5 pb-5 border-b border-gray-100">
-          <div>
-            <p className="text-lg font-black text-gray-900">{room.name}</p>
-            <p className="text-xs text-gray-500">
-              <i className="fa-solid fa-user mr-1"></i>{room.guests} huéspedes · {room.bed} · <b className="text-green-700">${room.price}</b>/noche
-            </p>
-          </div>
-          <a href={AYENDA_BASE + room.id} target="_blank" rel="noopener noreferrer"
-            className="text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 px-3 py-2 rounded-lg inline-flex items-center gap-1">
-            <i className="fa-solid fa-arrow-up-right-from-square"></i>Reserva Ayenda
-          </a>
-        </div>
-
-        {/* Navegación de mes */}
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={prevMonth} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600">
-            <i className="fa-solid fa-chevron-left"></i>
-          </button>
-          <p className="font-black text-gray-800">{MONTHS_ES[month]} {year}</p>
-          <button onClick={nextMonth} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600">
-            <i className="fa-solid fa-chevron-right"></i>
-          </button>
-        </div>
-
-        {/* Encabezado días */}
-        <div className="grid grid-cols-7 gap-1.5 mb-1.5">
-          {WEEKDAYS_ES.map(d => <div key={d} className="text-center text-[11px] font-bold text-gray-400 py-1">{d}</div>)}
-        </div>
-
-        {/* Grilla */}
-        <div className="grid grid-cols-7 gap-1.5">
-          {cells.map((d, i) => {
-            if (d === null) return <div key={i} />;
-            const dateStr = ymd(year, month, d);
-            const busy = busyDays.includes(dateStr);
-            return (
-              <button key={i} onClick={() => toggleDay(dateStr)}
-                className={`aspect-square rounded-lg text-sm font-bold transition relative flex items-center justify-center
-                  ${busy ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-50 text-green-700 hover:bg-green-100'}
-                  ${isToday(d) ? 'ring-2 ring-green-600' : ''}
-                  ${isPast(d) && !busy ? 'opacity-50' : ''}`}>
-                {d}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Leyenda + resumen */}
-        <div className="flex items-center justify-between flex-wrap gap-3 mt-5 pt-4 border-t border-gray-100 text-xs">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-50 border border-green-200"></span>Disponible</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500"></span>Ocupado</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-gray-500"><b className="text-red-500">{busyThisMonth}</b> días ocupados este mes</span>
-            {busyThisMonth > 0 && (
-              <button onClick={clearMonth} className="text-gray-400 hover:text-red-500 font-bold">
-                <i className="fa-solid fa-eraser mr-1"></i>Limpiar mes
-              </button>
-            )}
+    <div>
+      {missing && <SetupBanner />}
+      <div className="grid lg:grid-cols-[260px_1fr] gap-6">
+        {/* Selector de habitaciones */}
+        <div>
+          <h2 className="text-sm font-black text-gray-500 uppercase tracking-wide mb-3">Habitaciones</h2>
+          <div className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0">
+            {ROOMS.map(r => {
+              const occupied = occByRoom[r.id] || 0;
+              const active = r.id === roomId;
+              return (
+                <button key={r.id} onClick={() => setRoomId(r.id)}
+                  className={`flex items-center justify-between gap-2 px-4 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition border ${active ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-100 hover:border-green-300'}`}>
+                  <span className="flex items-center gap-2">
+                    <i className={`fa-solid ${r.penthouse ? 'fa-crown' : 'fa-door-closed'} text-xs`}></i>{r.name}
+                  </span>
+                  {occupied > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${active ? 'bg-white/25' : 'bg-red-100 text-red-600'}`}>{occupied}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <p className="text-[11px] text-gray-400 mt-4 text-center">
-          <i className="fa-solid fa-circle-info mr-1"></i>
-          Toca un día para marcarlo ocupado o libre. Se guarda en este navegador (modo demo).
-        </p>
+        {/* Calendario */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-5 pb-5 border-b border-gray-100">
+            <div>
+              <p className="text-lg font-black text-gray-900">{room.name}</p>
+              <p className="text-xs text-gray-500"><i className="fa-solid fa-user mr-1"></i>{room.guests} huéspedes · {room.bed} · <b className="text-green-700">${room.price}</b>/noche</p>
+            </div>
+            <a href={AYENDA_BASE + room.id} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 px-3 py-2 rounded-lg inline-flex items-center gap-1">
+              <i className="fa-solid fa-arrow-up-right-from-square"></i>Reserva Ayenda
+            </a>
+          </div>
+
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={prevMonth} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-left"></i></button>
+            <p className="font-black text-gray-800">{MONTHS_ES[month]} {year}</p>
+            <button onClick={nextMonth} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-right"></i></button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+            {WEEKDAYS_ES.map(d => <div key={d} className="text-center text-[11px] font-bold text-gray-400 py-1">{d}</div>)}
+          </div>
+
+          {loading ? (
+            <div className="text-center py-12 text-gray-300"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>
+          ) : (
+            <div className="grid grid-cols-7 gap-1.5">
+              {cells.map((d, i) => {
+                if (d === null) return <div key={i} />;
+                const dateStr = ymd(year, month, d);
+                const res = dayMap[dateStr];
+                const cellCls = res ? STATUS_META[res.status].cell : 'bg-green-50 text-green-700 hover:bg-green-100';
+                return (
+                  <button key={i} onClick={() => onDayClick(d)} title={res ? `${res.guest_name} (${STATUS_META[res.status].label})` : 'Libre — clic para reservar'}
+                    className={`aspect-square rounded-lg text-sm font-bold transition flex items-center justify-center ${cellCls} ${isToday(d) ? 'ring-2 ring-green-600' : ''}`}>
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between flex-wrap gap-3 mt-5 pt-4 border-t border-gray-100 text-xs">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-50 border border-green-200"></span>Libre</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-400"></span>Pendiente</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500"></span>Confirmada</span>
+            </div>
+            <span className="text-gray-500"><b className="text-red-500">{busyThisMonth}</b> noches ocupadas este mes</span>
+          </div>
+
+          <p className="text-[11px] text-gray-400 mt-4 text-center">
+            <i className="fa-solid fa-circle-info mr-1"></i>
+            Clic en un día libre para crear una reserva; clic en uno ocupado para ver/editar la reserva.
+          </p>
+        </div>
       </div>
     </div>
   );

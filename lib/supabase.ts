@@ -33,3 +33,24 @@ export interface AvailabilityItem {
   note: string | null;
   updated_at: string;
 }
+
+export type ReservationStatus = 'pending' | 'confirmed' | 'cancelled';
+export type ReservationSource = 'web' | 'whatsapp' | 'ayenda' | 'manual';
+
+export interface Reservation {
+  id: string;
+  room_id: string;        // '301', '601'...
+  room_name: string | null;
+  guest_name: string;
+  guest_phone: string | null;
+  guest_email: string | null;
+  check_in: string;       // 'YYYY-MM-DD'
+  check_out: string;      // 'YYYY-MM-DD'
+  guests: number | null;
+  nights?: number | null;
+  status: ReservationStatus;
+  source: ReservationSource;
+  total: number | null;
+  note: string | null;
+  created_at: string;
+}
