@@ -776,6 +776,27 @@ const TimelineBoard: React.FC = () => {
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-red-300"></span>Bloqueado</span>
       </div>
 
+      {/* Aviso de estado: cuántas reservas hay y si caen en la ventana visible */}
+      {!loading && (reservations.length === 0 ? (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-3 text-sm">
+          <i className="fa-solid fa-circle-info mr-1"></i> No hay reservas cargadas todavía. Ve a la pestaña <b>Reservas → Importar</b> para cargarlas. (Si ya importaste y no aparece nada, revisa que corriste el SQL en Supabase.)
+        </div>
+      ) : (() => {
+        const winEnd = addDaysStr(start, days);
+        const inWindow = reservations.filter(r => r.check_in < winEnd && r.check_out > start).length;
+        const earliest = reservations.reduce((a, b) => (a.check_in < b.check_in ? a : b));
+        return (
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3 text-xs text-gray-500">
+            <span><b className="text-gray-700">{reservations.length}</b> reservas cargadas · <b className="text-gray-700">{inWindow}</b> en este rango</span>
+            {inWindow === 0 && (
+              <button onClick={() => setStart(earliest.check_in)} className="font-bold text-green-700 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg">
+                <i className="fa-solid fa-arrow-right-long mr-1"></i>Ir a la 1ª reserva ({fmtDate(earliest.check_in)})
+              </button>
+            )}
+          </div>
+        );
+      })())}
+
       {/* Tabla timeline */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
         <div className="min-w-max">
