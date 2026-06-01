@@ -375,6 +375,8 @@ const ReservationsManager: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [filter, setFilter] = useState<'all' | ReservationStatus>('all');
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
+  const [live, setLive] = useState(false);
+  const [newId, setNewId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -384,6 +386,32 @@ const ReservationsManager: React.FC = () => {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  // Suscripción en vivo: las reservas entran/cambian sin recargar.
+  useEffect(() => {
+    const ch = supabase
+      .channel('reservations-stream')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, (payload: any) => {
+        if (payload.eventType === 'INSERT') {
+          const r = payload.new as Reservation;
+          setItems(prev => prev.some(i => i.id === r.id) ? prev : [r, ...prev]);
+          setNewId(r.id);
+        } else if (payload.eventType === 'UPDATE') {
+          setItems(prev => prev.map(i => i.id === payload.new.id ? (payload.new as Reservation) : i));
+        } else if (payload.eventType === 'DELETE') {
+          setItems(prev => prev.filter(i => i.id !== payload.old.id));
+        }
+      })
+      .subscribe((status: string) => setLive(status === 'SUBSCRIBED'));
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  // Quitar el resaltado de "nueva" tras unos segundos.
+  useEffect(() => {
+    if (!newId) return;
+    const t = setTimeout(() => setNewId(null), 6000);
+    return () => clearTimeout(t);
+  }, [newId]);
 
   const setStatus = async (r: Reservation, status: ReservationStatus) => {
     await supabase.from('reservations').update({ status }).eq('id', r.id);
@@ -415,6 +443,16 @@ const ReservationsManager: React.FC = () => {
   return (
     <div>
       {missing && <SetupBanner />}
+      <div className="flex items-center gap-2 mb-4">
+        <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ${live ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+          <span className={`relative flex w-2 h-2`}>
+            {live && <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping"></span>}
+            <span className={`relative inline-flex rounded-full w-2 h-2 ${live ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+          </span>
+          {live ? 'En vivo' : 'Conectando…'}
+        </span>
+        <span className="text-xs text-gray-400">Las nuevas reservas aparecen aquí automáticamente.</span>
+      </div>
       <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
         <div className="flex gap-2 flex-wrap">
           {filters.map(ff => (
@@ -441,7 +479,8 @@ const ReservationsManager: React.FC = () => {
             const meta = STATUS_META[r.status];
             const phone = (r.guest_phone || '').replace(/\D/g, '');
             return (
-              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-4">
+              <div key={r.id} className={`relative bg-white rounded-2xl border shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-4 transition ${r.id === newId ? 'border-green-400 ring-2 ring-green-300' : 'border-gray-100'}`}>
+                {r.id === newId && <span className="absolute -mt-7 ml-1 text-[10px] font-black text-green-600">● NUEVA</span>}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${meta.chip}`}><span className={`inline-block w-1.5 h-1.5 rounded-full ${meta.dot} mr-1`}></span>{meta.label}</span>
@@ -501,6 +540,15 @@ const RoomsCalendar: React.FC = () => {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  // El calendario también se actualiza en vivo.
+  useEffect(() => {
+    const ch = supabase
+      .channel('calendar-stream')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const room = roomById(roomId)!;
 
