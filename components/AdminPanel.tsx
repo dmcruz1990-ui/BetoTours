@@ -222,16 +222,22 @@ const AvailabilityManager: React.FC = () => {
 interface Room { id: string; name: string; guests: number; bed: string; price: string; penthouse?: boolean; }
 
 const ROOMS: Room[] = [
+  { id: '200', name: 'Aparta Suite 200', guests: 2, bed: '—', price: '—' },
   { id: '301', name: 'Aparta Suite 301', guests: 4, bed: 'Cama 1.40', price: '150.000' },
   { id: '302', name: 'Aparta Suite 302', guests: 4, bed: 'Cama 1.40', price: '130.000' },
   { id: '303', name: 'Aparta Suite 303', guests: 3, bed: 'Cama 1.40', price: '110.000' },
+  { id: '304', name: 'Estudio 304', guests: 2, bed: '—', price: '—' },
+  { id: '305', name: 'Aparta Suite 305', guests: 2, bed: '—', price: '—' },
   { id: '401', name: 'Aparta Suite 401', guests: 6, bed: 'Cama 1.60', price: '160.000' },
   { id: '402', name: 'Aparta Suite 402', guests: 6, bed: 'Cama 1.40', price: '160.000' },
   { id: '403', name: 'Aparta Suite 403', guests: 3, bed: 'Cama Doble', price: '110.000' },
+  { id: '404', name: 'Aparta Suite 404', guests: 2, bed: '—', price: '—' },
   { id: '501', name: 'Aparta Suite 501', guests: 7, bed: 'Cama 1.60', price: '170.000' },
   { id: '502', name: 'Aparta Suite 502', guests: 5, bed: 'Cama 1.40', price: '150.000' },
   { id: '504', name: 'Aparta Suite 504', guests: 6, bed: 'Cama 1.40', price: '160.000' },
   { id: '601', name: 'Penthouse 601', guests: 9, bed: 'Cama 1.40', price: '170.000', penthouse: true },
+  { id: 'casita', name: 'Casita cerca al Centro', guests: 2, bed: '—', price: '—' },
+  { id: 'finca', name: 'Finca Sopetrán', guests: 2, bed: '—', price: '—' },
 ];
 
 const AYENDA_BASE = 'https://engine.ayenda.co/aparta-suites-torre-de-prado-';
