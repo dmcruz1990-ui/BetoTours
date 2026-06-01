@@ -139,14 +139,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('inicio')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'inicio' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-house mr-2"></i>Inicio
         </button>
+        <button onClick={() => setTab('board')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'board' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-table-columns mr-2"></i>Calendario general
+        </button>
         <button onClick={() => setTab('reservas')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'reservas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-bell-concierge mr-2"></i>Reservas
         </button>
-        <button onClick={() => setTab('board')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'board' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
-          <i className="fa-solid fa-table-columns mr-2"></i>Tablero
-        </button>
         <button onClick={() => setTab('rooms')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'rooms' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
-          <i className="fa-solid fa-calendar-days mr-2"></i>Calendario
+          <i className="fa-solid fa-calendar-days mr-2"></i>Por habitación
         </button>
         <button onClick={() => setTab('avail')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-toggle-on mr-2"></i>Disponibilidad
@@ -906,7 +906,7 @@ const TimelineBoard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [start, setStart] = useState(todayStr());
-  const [days, setDays] = useState(14);
+  const [days, setDays] = useState(30);
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
   const [detail, setDetail] = useState<Reservation | null>(null);
 
