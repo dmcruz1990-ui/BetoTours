@@ -42,3 +42,6 @@ create policy "reservations_update" on public.reservations for update using (tru
 
 drop policy if exists "reservations_delete" on public.reservations;
 create policy "reservations_delete" on public.reservations for delete using (true);
+
+-- Tiempo real: las reservas se ven en vivo en el panel sin recargar.
+alter publication supabase_realtime add table public.reservations;
