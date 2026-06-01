@@ -378,11 +378,11 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
 const money = (n: number | null | undefined) => '$' + (n || 0).toLocaleString('es-CO');
 const fullDate = (s: string) => { const d = new Date(s + 'T00:00:00'); return `${WEEKDAYS_ES[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0, 3).toLowerCase()}`; };
 
-const GuestRow: React.FC<{ r: Reservation }> = ({ r }) => {
+const GuestRow: React.FC<{ r: Reservation; onClick?: () => void }> = ({ r, onClick }) => {
   const phone = (r.guest_phone || '').replace(/\D/g, '');
   const meta = STATUS_META[r.status];
   return (
-    <div className="flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0">
+    <div onClick={onClick} className={`flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0 ${onClick ? 'cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg' : ''}`}>
       <div className="min-w-0">
         <p className="font-bold text-gray-800 truncate">{r.guest_name}</p>
         <p className="text-xs text-gray-500">
@@ -393,7 +393,60 @@ const GuestRow: React.FC<{ r: Reservation }> = ({ r }) => {
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.chip}`}>{meta.label}</span>
-        {phone && <a href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm"><i className="fa-brands fa-whatsapp"></i></a>}
+        {phone && <a onClick={e => e.stopPropagation()} href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm"><i className="fa-brands fa-whatsapp"></i></a>}
+      </div>
+    </div>
+  );
+};
+
+// Ficha de detalle de una reserva (solo lectura + acciones rápidas)
+const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose: () => void; onChanged: () => void; }> = ({ r, onEdit, onClose, onChanged }) => {
+  const [busy, setBusy] = useState(false);
+  const phone = (r.guest_phone || '').replace(/\D/g, '');
+  const meta = STATUS_META[r.status];
+  const setStatus = async (status: ReservationStatus) => { setBusy(true); await supabase.from('reservations').update({ status }).eq('id', r.id); setBusy(false); onChanged(); };
+  const remove = async () => { if (!confirm(`¿Borrar la reserva de ${r.guest_name}?`)) return; setBusy(true); await supabase.from('reservations').delete().eq('id', r.id); setBusy(false); onChanged(); };
+  const Row: React.FC<{ icon: string; label: string; value: React.ReactNode }> = ({ icon, label, value }) => (
+    <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+      <i className={`fa-solid ${icon} text-gray-400 w-4 text-center mt-0.5`}></i>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-gray-400 font-bold uppercase">{label}</p>
+        <p className="text-sm text-gray-800 font-semibold break-words">{value}</p>
+      </div>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-auto">
+        <div className="p-6">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-xl font-black text-gray-900">{r.guest_name}</h2>
+              <span className={`inline-block mt-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${meta.chip}`}>{meta.label}</span>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+          </div>
+
+          <div className="bg-gray-50 rounded-xl px-4 py-1">
+            <Row icon="fa-door-open" label="Habitación" value={r.room_name || r.room_id} />
+            <Row icon="fa-calendar-day" label="Llegada" value={fullDate(r.check_in)} />
+            <Row icon="fa-calendar-xmark" label="Salida" value={fullDate(r.check_out)} />
+            <Row icon="fa-moon" label="Noches" value={`${r.nights || ''} noche${(r.nights || 0) === 1 ? '' : 's'} · ${r.guests || 1} huésped${(r.guests || 1) === 1 ? '' : 'es'}`} />
+            {r.guest_phone && <Row icon="fa-phone" label="Teléfono" value={r.guest_phone} />}
+            {r.guest_email && <Row icon="fa-envelope" label="Correo" value={r.guest_email} />}
+            <Row icon="fa-tag" label="Origen" value={SOURCE_LABEL[r.source] || r.source} />
+            {(r.total || 0) > 0 && <Row icon="fa-sack-dollar" label="Valor" value={money(r.total)} />}
+            {r.note && <Row icon="fa-note-sticky" label="Nota" value={r.note} />}
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-5">
+            {phone && <a href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>WhatsApp</a>}
+            {r.status !== 'confirmed' && <button disabled={busy} onClick={() => setStatus('confirmed')} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
+            {r.status !== 'cancelled' && <button disabled={busy} onClick={() => setStatus('cancelled')} className="px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-sm hover:bg-amber-100 disabled:opacity-50"><i className="fa-solid fa-ban mr-1.5"></i>Cancelar</button>}
+            {onEdit && <button onClick={onEdit} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200"><i className="fa-solid fa-pen mr-1.5"></i>Editar</button>}
+            <button disabled={busy} onClick={remove} className="px-4 py-2.5 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-100 disabled:opacity-50"><i className="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -403,6 +456,7 @@ const Dashboard: React.FC<{ onGoImport: () => void }> = ({ onGoImport }) => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
+  const [detail, setDetail] = useState<Reservation | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -481,7 +535,7 @@ const Dashboard: React.FC<{ onGoImport: () => void }> = ({ onGoImport }) => {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <h3 className="font-black text-gray-800 mb-3"><i className="fa-solid fa-plane-arrival text-green-600 mr-2"></i>Llegan hoy</h3>
           {arrivals.length === 0 ? <p className="text-gray-400 text-sm py-6 text-center">Sin llegadas para hoy.</p>
-            : arrivals.map(r => <GuestRow key={r.id} r={r} />)}
+            : arrivals.map(r => <GuestRow key={r.id} r={r} onClick={() => setDetail(r)} />)}
         </div>
 
         {/* Próximas llegadas */}
@@ -489,7 +543,7 @@ const Dashboard: React.FC<{ onGoImport: () => void }> = ({ onGoImport }) => {
           <h3 className="font-black text-gray-800 mb-3"><i className="fa-solid fa-calendar-check text-blue-600 mr-2"></i>Próximas llegadas</h3>
           {upcoming.length === 0 ? <p className="text-gray-400 text-sm py-6 text-center">No hay reservas próximas.</p>
             : upcoming.map(r => (
-              <div key={r.id} className="flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0">
+              <div key={r.id} onClick={() => setDetail(r)} className="flex items-center justify-between gap-3 py-3 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg">
                 <div className="min-w-0">
                   <p className="font-bold text-gray-800 truncate">{r.guest_name}</p>
                   <p className="text-xs text-gray-500"><i className="fa-solid fa-door-open mr-1"></i>{r.room_name || r.room_id} <span className="mx-1 text-gray-300">·</span>{r.nights || ''} noche{(r.nights || 0) === 1 ? '' : 's'}</p>
@@ -504,9 +558,11 @@ const Dashboard: React.FC<{ onGoImport: () => void }> = ({ onGoImport }) => {
       {departures.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <h3 className="font-black text-gray-800 mb-3"><i className="fa-solid fa-plane-departure text-blue-600 mr-2"></i>Salen hoy (hacer aseo)</h3>
-          {departures.map(r => <GuestRow key={r.id} r={r} />)}
+          {departures.map(r => <GuestRow key={r.id} r={r} onClick={() => setDetail(r)} />)}
         </div>
       )}
+
+      {detail && <ReservationDetail r={detail} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load(); }} />}
     </div>
   );
 };
@@ -852,6 +908,7 @@ const TimelineBoard: React.FC = () => {
   const [start, setStart] = useState(todayStr());
   const [days, setDays] = useState(14);
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
+  const [detail, setDetail] = useState<Reservation | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -967,7 +1024,7 @@ const TimelineBoard: React.FC = () => {
                   const isStart = r && r.check_in === ds;
                   const meta = r ? barColor(r) : null;
                   return (
-                    <button key={ds} onClick={() => r ? setEditing(r) : setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) }))}
+                    <button key={ds} onClick={() => r ? setDetail(r) : setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) }))}
                       title={r ? `${r.guest_name} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)} (${meta!.label})` : `${room.name} · ${fmtDate(ds)} — libre`}
                       style={{ width: COL }}
                       className={`flex-shrink-0 h-12 border-r border-gray-50 relative flex items-center justify-center text-[11px] font-bold overflow-visible ${isToday(ds) ? 'bg-green-50/40' : isWeekend(ds) && !r ? 'bg-gray-50/60' : ''}`}>
@@ -989,6 +1046,8 @@ const TimelineBoard: React.FC = () => {
         <i className="fa-solid fa-circle-info mr-1"></i>
         Clic en una celda libre para crear una reserva; clic en una barra para abrir la reserva. Desliza para ver más días.
       </p>
+
+      {detail && <ReservationDetail r={detail} onEdit={() => { setEditing(detail); setDetail(null); }} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load(); }} />}
     </div>
   );
 };
@@ -1003,6 +1062,7 @@ const RoomsCalendar: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
+  const [detail, setDetail] = useState<Reservation | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -1055,7 +1115,7 @@ const RoomsCalendar: React.FC = () => {
   const onDayClick = (d: number) => {
     const dateStr = ymd(year, month, d);
     const res = dayMap[dateStr];
-    if (res) { setEditing(res); return; }
+    if (res) { setDetail(res); return; }
     setEditing(blankReservation({ room_id: roomId, check_in: dateStr, check_out: addDaysStr(dateStr, 1), source: 'manual' }));
   };
 
@@ -1148,6 +1208,8 @@ const RoomsCalendar: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {detail && <ReservationDetail r={detail} onEdit={() => { setEditing(detail); setDetail(null); }} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load(); }} />}
     </div>
   );
 };
