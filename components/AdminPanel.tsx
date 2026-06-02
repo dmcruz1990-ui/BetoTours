@@ -1240,6 +1240,22 @@ const BlogManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `covers/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('blog').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) {
+      alert('No se pudo subir la imagen: ' + error.message + '\n(¿Ya creaste el bucket "blog" en Supabase Storage?)');
+      setUploading(false);
+      return;
+    }
+    const { data } = supabase.storage.from('blog').getPublicUrl(path);
+    setEditing((prev: any) => ({ ...prev, cover_image: data.publicUrl }));
+    setUploading(false);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -1290,13 +1306,19 @@ const BlogManager: React.FC = () => {
             onChange={e => setEditing({ ...editing, excerpt: e.target.value })}
             className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
           <div>
-            <input placeholder="Enlace DIRECTO de la imagen de portada (debe terminar en .jpg, .png, .webp…)" value={editing.cover_image}
+            <label className="block text-sm font-bold text-gray-600 mb-1">Imagen de portada</label>
+            <div className="flex items-center gap-3 mb-2">
+              <label className={`px-4 py-2.5 rounded-xl font-bold text-sm cursor-pointer inline-flex items-center gap-2 ${uploading ? 'bg-gray-200 text-gray-400' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+                <i className={`fa-solid ${uploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
+                {uploading ? 'Subiendo…' : 'Subir imagen'}
+                <input type="file" accept="image/*" disabled={uploading} className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.currentTarget.value = ''; }} />
+              </label>
+              <span className="text-xs text-gray-400">Elige una foto de tu equipo y se sube sola.</span>
+            </div>
+            <input placeholder="…o pega un enlace directo de imagen (.jpg, .png)" value={editing.cover_image}
               onChange={e => setEditing({ ...editing, cover_image: e.target.value })}
               className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
-            <p className="text-xs text-gray-400 mt-1">
-              <i className="fa-solid fa-circle-info mr-1"></i>
-              En imgbb usa el <b>"Enlace directo"</b> (empieza con <code>https://i.ibb.co/…</code> y termina en .jpg/.png), no el de la página.
-            </p>
             {editing.cover_image && (
               <img src={editing.cover_image} alt="Vista previa"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
