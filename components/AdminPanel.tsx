@@ -606,6 +606,7 @@ const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
     return {
       ok: true, raw,
       r: {
+        external_ref: idCell && /^\d+$/.test(idCell) ? 'ayenda-' + idCell : null,
         room_id: rid, room_name: room?.name || rid,
         guest_name: name,
         guest_email: email,
@@ -637,7 +638,8 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
     if (toImport.length === 0) return;
     setSaving(true); setResult('');
     const rows = toImport.map(p => p.r);
-    const { error } = await supabase.from('reservations').insert(rows);
+    // upsert por external_ref: no duplica si se vuelve a importar (ni choca con el robot)
+    const { error } = await supabase.from('reservations').upsert(rows, { onConflict: 'external_ref' });
     setSaving(false);
     if (error) { setResult((isMissingTable(error) ? MISSING_TABLE_MSG : error.message)); return; }
     onDone();
