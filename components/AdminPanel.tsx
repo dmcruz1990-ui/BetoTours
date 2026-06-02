@@ -190,6 +190,7 @@ const ROOMS: Room[] = [
   { id: '404', name: 'Aparta Suite 404', guests: 2, bed: '—', price: '—' },
   { id: '501', name: 'Aparta Suite 501', guests: 7, bed: 'Cama 1.60', price: '170.000' },
   { id: '502', name: 'Aparta Suite 502', guests: 5, bed: 'Cama 1.40', price: '150.000' },
+  { id: '503', name: 'Aparta Suite 503', guests: 2, bed: '—', price: '—' },
   { id: '504', name: 'Aparta Suite 504', guests: 6, bed: 'Cama 1.40', price: '160.000' },
   { id: '601', name: 'Penthouse 601', guests: 9, bed: 'Cama 1.40', price: '170.000', penthouse: true },
   { id: 'casita', name: 'Casita cerca al Centro', guests: 2, bed: '—', price: '—' },
