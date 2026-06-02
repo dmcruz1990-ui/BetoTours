@@ -562,8 +562,39 @@ const parseDate = (s: string): string | null => {
   return `${yr}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
 };
 const parseMoney = (s: string): number | null => {
-  const n = (s || '').replace(/[^\d]/g, '');
-  return n ? Number(n) : null;
+  let str = (s || '').replace(/[^\d.,]/g, '');
+  if (!str) return null;
+  // Decimal de 2 dígitos al final (Expedia: 390981.82) → tomar parte entera
+  const dec = str.match(/^(.*)[.,](\d{2})$/);
+  let intpart = dec ? dec[1] : str;
+  intpart = intpart.replace(/[.,]/g, ''); // quitar separadores de miles
+  const n = Number(intpart);
+  return n || null;
+};
+
+// Separa una fila en celdas: por tabs, o CSV con comillas
+const splitCells = (line: string): string[] => {
+  if (line.includes('\t')) return line.split('\t').map(c => c.trim().replace(/^"|"$/g, ''));
+  const out: string[] = []; let cur = ''; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { q = !q; continue; }
+    if (ch === ',' && !q) { out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+};
+
+// Mapeo de tipo de apartamento (Expedia) → número de apartamento real
+const ROOM_TYPE_MAP: Record<string, string> = { familiar: '404', standard: '303', clasico: '403', basico: '301' };
+const resolveRoomFromType = (raw: string, typeMap: Record<string, string>): string => {
+  const v = (raw || '').toLowerCase();
+  if (/familiar|family/.test(v)) return typeMap.familiar;
+  if (/est[aá]ndar|standard/.test(v)) return typeMap.standard;
+  if (/cl[aá]sic|classic/.test(v)) return typeMap.clasico;
+  if (/b[aá]sic|basic/.test(v)) return typeMap.basico;
+  return '';
 };
 const mapStatus = (s: string): ReservationStatus => {
   const v = (s || '').toLowerCase();
@@ -590,16 +621,74 @@ const hashStr = (s: string): number => {
 };
 const RANDOM_ROOM = '__random__';
 
-// Parser robusto del formato Ayenda/Booking. Detecta cada campo por su contenido
-// (no por posición), así soporta filas sin email donde las columnas se corren.
-const parseAyenda = (text: string, roomId: string, channel: string = 'auto'): ParsedRow[] => {
-  return text.split(/\r?\n/).map(line => line.trimEnd()).filter(l => l.trim() !== '').map((raw): ParsedRow => {
-    const cols = (raw.includes('\t') ? raw.split('\t') : raw.split(/\s*[;,]\s*/)).map(s => s.trim());
+// Parser robusto: detecta encabezados (Expedia/Booking/Ayenda) o cae a modo por contenido.
+const parseAyenda = (text: string, roomId: string, channel: string = 'auto', typeMap: Record<string, string> = ROOM_TYPE_MAP): ParsedRow[] => {
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+  if (lines.length === 0) return [];
+
+  const isRandom = roomId === RANDOM_ROOM;
+  const pickRoom = (roomRaw: string, seed: string): string => {
+    const num = (roomRaw || '').match(/\d{3}/);
+    if (num && ROOMS.find(r => r.id === num[0])) return num[0];
+    const byType = resolveRoomFromType(roomRaw, typeMap);
+    if (byType) return byType;
+    return isRandom ? ROOMS[hashStr(seed) % ROOMS.length].id : roomId;
+  };
+  const buildRow = (r: any): ParsedRow => ({ ok: true, raw: '', r });
+
+  // ¿Hay fila de encabezado?
+  const head = splitCells(lines[0]);
+  const hj = head.join(' ').toLowerCase();
+  const hasHeader = /(hu[eé]sped|cliente|reservado)/.test(hj) && /(entrada|desde|check)/.test(hj) && /(salida|hasta|check)/.test(hj);
+
+  if (hasHeader) {
+    const find = (preds: RegExp[]) => { for (const re of preds) { const i = head.findIndex(h => re.test(h.toLowerCase())); if (i >= 0) return i; } return -1; };
+    const idx = {
+      name: find([/nombre del cliente/, /hu[eé]sped/, /^cliente/, /reservado/]),
+      checkin: find([/de entrada/, /entrada/, /desde/, /check.?in/]),
+      checkout: find([/de salida/, /salida/, /hasta/, /check.?out/]),
+      room: find([/habitaci/, /tipo de unidad/, /alojamiento/, /tipo de apart/]),
+      price: find([/importe de la reserva/, /precio/, /valor de la reserva/, /valor/]),
+      status: find([/^estado$/, /estado del pago/, /estado/]),
+      id: find([/id de reserva/, /n[uú]mero de reserva/, /^reserva$/, /n.* de confirmaci/, /confirmaci/]),
+      phone: find([/tel[eé]fono/]),
+      email: find([/email|correo/]),
+    };
+    return lines.slice(1).map((raw): ParsedRow => {
+      const c = splitCells(raw);
+      const get = (i: number) => (i >= 0 && c[i] ? c[i].trim() : '');
+      const name = get(idx.name);
+      const ci = parseDate(get(idx.checkin));
+      const co = parseDate(get(idx.checkout));
+      if (!name) return { ok: false, reason: 'sin nombre', raw };
+      if (!ci || !co) return { ok: false, reason: 'fechas inválidas', raw };
+      const idVal = (get(idx.id).match(/[A-Za-z0-9]+/) || [''])[0];
+      const emailRaw = get(idx.email);
+      const email = /@/.test(emailRaw) ? emailRaw : (c.find(x => /@/.test(x)) || null);
+      const phoneRaw = get(idx.phone);
+      const phone = /^\+?\d[\d\s-]{6,}$/.test(phoneRaw) ? phoneRaw : null;
+      const roomRaw = get(idx.room);
+      const effChannel = channel !== 'auto' ? channel : (c.find(x => /booking|airbnb|expedia|despegar|ayenda/i.test(x)) || '');
+      const rid = pickRoom(roomRaw, idVal + name);
+      const refNote = idVal ? `Ref ${idVal}${effChannel ? ' · ' + effChannel : ''}` : (effChannel || null);
+      return buildRow({
+        external_ref: idVal ? 'ext-' + idVal : null,
+        room_id: rid, room_name: roomById(rid)?.name || rid,
+        guest_name: name, guest_email: email, guest_phone: phone,
+        check_in: ci, check_out: co, guests: 1,
+        status: mapStatus(get(idx.status)),
+        source: mapSource(effChannel),
+        total: parseMoney(get(idx.price)),
+        note: isRandom ? `${refNote ? refNote + ' · ' : ''}⚠️ habitación temporal` : refNote,
+      });
+    });
+  }
+
+  // --- Sin encabezado: modo por contenido (export de Ayenda sin cabecera) ---
+  return lines.map((raw): ParsedRow => {
+    const cols = splitCells(raw);
     const idCell = cols[0] || '';
-    // Saltar encabezado
-    if (/^(reserva|n[uú]mero de reserva)$/i.test(idCell) || (/cliente|reservado por/i.test(cols[1] || '') && /entrada|salida|desde|hasta|estado/i.test(raw.toLowerCase()))) {
-      return { ok: false, reason: 'encabezado', raw };
-    }
+    if (/^(reserva|n[uú]mero de reserva)$/i.test(idCell)) return { ok: false, reason: 'encabezado', raw };
     const name = cols[1] || '';
     const dates = cols.map(parseDate).filter(Boolean) as string[];
     if (!name) return { ok: false, reason: 'sin nombre', raw };
@@ -608,31 +697,19 @@ const parseAyenda = (text: string, roomId: string, channel: string = 'auto'): Pa
     const phone = cols.find((c, i) => i > 0 && c !== idCell && !/@/.test(c) && !parseDate(c) && /^\+?\d[\d\s\-]{6,}$/.test(c)) || null;
     const statusCell = cols.find(c => /^(ok|cancel|pend|confirm)/i.test(c)) || '';
     const detectedChannel = cols.find(c => /booking|airbnb|expedia|despegar|ayenda|whats|web|directo|trivago|hotel/i.test(c)) || '';
-    // Canal: el elegido en el importador manda; si está en "auto", se detecta del texto
     const effChannel = channel !== 'auto' ? channel : detectedChannel;
-    // Precio: acepta $ o COP (formato Booking) — toma el primer monto > 0
     const moneyCell = cols.find(c => /(\$|cop)/i.test(c) && (parseMoney(c) || 0) > 0) || '';
-    // Asignación de habitación: fija, o "aleatoria" estable según la reserva (temporal)
-    const isRandom = roomId === RANDOM_ROOM;
     const rid = isRandom ? ROOMS[hashStr(idCell + name) % ROOMS.length].id : roomId;
-    const room = roomById(rid);
     const refNote = idCell && /^\d+$/.test(idCell) ? `Ref ${idCell}${effChannel ? ' · ' + effChannel : ''}` : (effChannel || null);
-    return {
-      ok: true, raw,
-      r: {
-        external_ref: idCell && /^\d+$/.test(idCell) ? 'ayenda-' + idCell : null,
-        room_id: rid, room_name: room?.name || rid,
-        guest_name: name,
-        guest_email: email,
-        guest_phone: phone,
-        check_in: dates[0], check_out: dates[1],
-        guests: 1,
-        status: mapStatus(statusCell),
-        source: mapSource(effChannel),
-        total: parseMoney(moneyCell),
-        note: isRandom ? `${refNote ? refNote + ' · ' : ''}⚠️ habitación temporal` : refNote,
-      },
-    };
+    return buildRow({
+      external_ref: idCell && /^\d+$/.test(idCell) ? 'ayenda-' + idCell : null,
+      room_id: rid, room_name: roomById(rid)?.name || rid,
+      guest_name: name, guest_email: email, guest_phone: phone,
+      check_in: dates[0], check_out: dates[1], guests: 1,
+      status: mapStatus(statusCell), source: mapSource(effChannel),
+      total: parseMoney(moneyCell),
+      note: isRandom ? `${refNote ? refNote + ' · ' : ''}⚠️ habitación temporal` : refNote,
+    });
   });
 };
 
@@ -643,8 +720,9 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
   const [includeCancelled, setIncludeCancelled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
+  const [typeMap, setTypeMap] = useState<Record<string, string>>({ ...ROOM_TYPE_MAP });
 
-  const parsed = text.trim() ? parseAyenda(text, roomId, channel) : [];
+  const parsed = text.trim() ? parseAyenda(text, roomId, channel, typeMap) : [];
   const valid = parsed.filter(p => p.ok);
   const toImport = valid.filter(p => includeCancelled || p.r.status !== 'cancelled');
   const skipped = parsed.filter(p => !p.ok && p.reason !== 'encabezado');
@@ -687,6 +765,21 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
           Incluir reservas canceladas
         </label>
       </div>
+
+      {channel === 'expedia' && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4">
+          <p className="text-xs font-bold text-orange-800 mb-2"><i className="fa-solid fa-shuffle mr-1"></i>Enrutar tipos de Expedia → apartamento:</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {([['familiar', 'Familiar'], ['standard', 'Estándar'], ['clasico', 'Clásico'], ['basico', 'Básico']] as const).map(([key, label]) => (
+              <label key={key} className="text-[11px] font-bold text-gray-600 flex flex-col gap-1">{label}
+                <select value={typeMap[key]} onChange={e => setTypeMap(m => ({ ...m, [key]: e.target.value }))} className="p-2 border border-gray-200 rounded-lg text-xs font-normal">
+                  {ROOMS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <textarea value={text} onChange={e => setText(e.target.value)} rows={10}
         placeholder="Pega aquí las filas copiadas del Excel…"
