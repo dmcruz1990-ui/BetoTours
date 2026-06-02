@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase, BlogPost, AvailabilityItem, Reservation, ReservationStatus } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -421,7 +421,7 @@ const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose
 
           <div className="flex flex-wrap gap-2 mt-5">
             {phone && <a href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>Enviar confirmación</a>}
-            {r.status !== 'confirmed' && <button disabled={busy} onClick={() => setStatus('confirmed')} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
+            {r.source === 'manual' && r.status !== 'confirmed' && <button disabled={busy} onClick={() => setStatus('confirmed')} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
             {r.status !== 'cancelled' && <button disabled={busy} onClick={() => setStatus('cancelled')} className="px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-sm hover:bg-amber-100 disabled:opacity-50"><i className="fa-solid fa-ban mr-1.5"></i>Cancelar</button>}
             {onEdit && <button onClick={onEdit} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200"><i className="fa-solid fa-pen mr-1.5"></i>Editar</button>}
             <button disabled={busy} onClick={remove} className="px-4 py-2.5 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-100 disabled:opacity-50"><i className="fa-solid fa-trash"></i></button>
@@ -873,7 +873,7 @@ const ReservationsManager: React.FC = () => {
                     <a href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" title="WhatsApp"
                       className="px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm font-bold"><i className="fa-brands fa-whatsapp"></i></a>
                   )}
-                  {r.status !== 'confirmed' && (
+                  {r.source === 'manual' && r.status !== 'confirmed' && (
                     <button onClick={() => setStatus(r, 'confirmed')} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-bold" title="Confirmar"><i className="fa-solid fa-check"></i></button>
                   )}
                   {r.status !== 'cancelled' && (
@@ -921,6 +921,9 @@ const TimelineBoard: React.FC = () => {
   const [days, setDays] = useState(30);
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
   const [detail, setDetail] = useState<Reservation | null>(null);
+  // Arrastre para alargar reservas manuales
+  const [drag, setDrag] = useState<{ id: string; roomId: string; overDay: string } | null>(null);
+  const draggedRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -936,6 +939,26 @@ const TimelineBoard: React.FC = () => {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
+
+  // Al soltar el mouse, guarda la nueva fecha de salida (alargar/acortar reserva manual)
+  const commitDrag = async () => {
+    const d = drag;
+    setDrag(null);
+    if (!d) return;
+    const res = reservations.find(x => x.id === d.id);
+    if (!res || d.overDay < res.check_in) return;
+    const newCheckout = addDaysStr(d.overDay, 1); // overDay = última noche
+    if (newCheckout === res.check_out) return;
+    await supabase.from('reservations').update({ check_out: newCheckout }).eq('id', res.id);
+    load();
+  };
+  useEffect(() => {
+    const up = () => { if (drag) commitDrag(); };
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  });
+
+  const dragRes = drag ? reservations.find(x => x.id === drag.id) : null;
 
   if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
 
@@ -1053,16 +1076,27 @@ const TimelineBoard: React.FC = () => {
                   <span className="truncate">{room.name}</span>
                 </div>
                 {dayList.map(ds => {
-                  const r = rmap[ds];
+                  let r = rmap[ds];
+                  // Vista previa del arrastre: alargar la reserva manual hasta el día sobre el que paso el mouse
+                  const inPreview = drag && dragRes && room.id === drag.roomId && ds >= dragRes.check_in && ds <= drag.overDay;
+                  if (inPreview && !r) r = dragRes!;
                   const isStart = r && r.check_in === ds;
+                  const isManual = r && r.source === 'manual';
+                  const isLastNight = r && addDaysStr(ds, 1) === r.check_out;
                   const meta = r ? barColor(r) : null;
                   return (
-                    <button key={ds} onClick={() => r ? setDetail(r) : setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) }))}
-                      title={r ? `${r.guest_name} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)} (${meta!.label})` : `${room.name} · ${fmtDate(ds)} — libre`}
+                    <button key={ds}
+                      onMouseDown={(e) => { if (isManual) { e.preventDefault(); draggedRef.current = false; setDrag({ id: r!.id, roomId: room.id, overDay: ds }); } }}
+                      onMouseEnter={() => { if (drag && drag.roomId === room.id && ds !== drag.overDay && ds >= (dragRes?.check_in || ds)) { draggedRef.current = true; setDrag({ ...drag, overDay: ds }); } }}
+                      onClick={() => {
+                        if (draggedRef.current) { draggedRef.current = false; return; }
+                        r ? setDetail(r) : setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) }));
+                      }}
+                      title={r ? `${r.guest_name} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)}${isManual ? ' (manual — arrastra el borde para alargar)' : ` (${meta!.label})`}` : `${room.name} · ${fmtDate(ds)} — libre`}
                       style={{ width: COL }}
-                      className={`flex-shrink-0 h-12 border-r border-gray-50 relative flex items-center justify-center text-[11px] font-bold overflow-visible ${isToday(ds) ? 'bg-green-50/40' : isWeekend(ds) && !r ? 'bg-gray-50/60' : ''}`}>
+                      className={`flex-shrink-0 h-12 border-r border-gray-50 relative flex items-center justify-center text-[11px] font-bold overflow-visible ${isManual && isLastNight ? 'cursor-ew-resize' : ''} ${isToday(ds) ? 'bg-green-50/40' : isWeekend(ds) && !r ? 'bg-gray-50/60' : ''}`}>
                       {r && (
-                        <span className={`absolute inset-y-1.5 left-0.5 right-0.5 rounded ${meta!.cls} flex items-center px-1 whitespace-nowrap overflow-hidden`}>
+                        <span className={`absolute inset-y-1.5 left-0.5 right-0.5 rounded ${meta!.cls} flex items-center px-1 whitespace-nowrap overflow-hidden ${isManual && isLastNight ? 'ring-2 ring-white/70' : ''}`}>
                           {isStart ? r.guest_name.split(' ')[0] : ''}
                         </span>
                       )}
@@ -1077,7 +1111,8 @@ const TimelineBoard: React.FC = () => {
 
       <p className="text-[11px] text-gray-400 mt-3 text-center">
         <i className="fa-solid fa-circle-info mr-1"></i>
-        Clic en una celda libre para crear una reserva; clic en una barra para abrir la reserva. Desliza para ver más días.
+        Clic en una celda libre para crear una reserva; clic en una barra para abrir la reserva.
+        <br />En reservas <b>manuales</b> (verdes), arrastra el <b>borde derecho</b> (con el ✋) para alargar los días si el huésped se queda más.
       </p>
 
       {detail && <ReservationDetail r={detail} onEdit={() => { setEditing(detail); setDetail(null); }} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load(); }} />}
