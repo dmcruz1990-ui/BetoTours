@@ -10,21 +10,14 @@ const slugify = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-// Clave de acceso demo (modo local, sin Supabase). Cambiar cuando se configure auth real.
-const DEMO_PASSWORD = '12345';
-
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [demo, setDemo] = useState<boolean>(() => {
-    try { return localStorage.getItem('beto_demo') === '1'; } catch { return false; }
-  });
   const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'blog'>('inicio');
 
-  // Login form — pre-llenado para acceso demo
-  const [email, setEmail] = useState('dmcruz1990@gmail.com');
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  // Login real (Supabase Auth)
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [authMsg, setAuthMsg] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -37,46 +30,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Verificar si el usuario logueado es admin (probando acceso a una tabla protegida)
-  useEffect(() => {
-    if (!session) { setIsAdmin(false); return; }
-    (async () => {
-      const { error } = await supabase.from('admins').select('email').limit(1);
-      setIsAdmin(!error);
-    })();
-  }, [session]);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthMsg('');
-    // Acceso demo: si la clave coincide, entra sin Supabase (modo local).
-    if (password.trim() === DEMO_PASSWORD) {
-      try { localStorage.setItem('beto_demo', '1'); } catch {}
-      setDemo(true);
-      return;
-    }
-    // Si pusieron otra clave, intentamos login real contra Supabase.
     setAuthLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setAuthMsg(error.message + ' — (la clave demo es 12345)');
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) setAuthMsg('Correo o contraseña incorrectos.');
     setAuthLoading(false);
   };
 
-  const handleLogout = async () => {
-    try { localStorage.removeItem('beto_demo'); } catch {}
-    setDemo(false);
-    await supabase.auth.signOut();
-  };
+  const handleLogout = async () => { await supabase.auth.signOut(); };
 
-  // ¿Tiene acceso al panel? Demo local O sesión real de admin.
-  const authed = demo || (!!session && isAdmin);
+  const authed = !!session;
 
   if (checking) {
     return <div className="text-center py-32 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-3xl"></i></div>;
   }
 
   // ---------- LOGIN ----------
-  if (!authed && !session) {
+  if (!authed) {
     return (
       <div className="max-w-md mx-auto px-4 py-20">
         <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
@@ -87,34 +59,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
             <h1 className="text-2xl font-black text-gray-900">Panel Beto Tours</h1>
             <p className="text-gray-500 text-sm mt-1">Acceso solo para administradores</p>
           </div>
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded-xl p-3 mb-4 text-center">
-            <i className="fa-solid fa-circle-info mr-1"></i> Acceso demo: clave <b>12345</b>. Solo presiona <b>Entrar</b>.
-          </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input type="email" required placeholder="Correo" value={email} onChange={e => setEmail(e.target.value)}
+            <input type="email" required placeholder="Correo" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username"
               className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
-            <input type="password" required placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)}
+            <input type="password" required placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"
               className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
             {authMsg && <p className="text-red-500 text-sm">{authMsg}</p>}
             <button type="submit" disabled={authLoading}
               className="w-full py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition disabled:opacity-50">
-              {authLoading ? '...' : 'Entrar'}
+              {authLoading ? 'Entrando…' : 'Entrar'}
             </button>
           </form>
-        </div>
-      </div>
-    );
-  }
-
-  // ---------- LOGUEADO PERO NO ADMIN ----------
-  if (!demo && session && !isAdmin) {
-    return (
-      <div className="max-w-md mx-auto px-4 py-20 text-center">
-        <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
-          <i className="fa-solid fa-triangle-exclamation text-yellow-500 text-4xl mb-4"></i>
-          <h1 className="text-xl font-black mb-2">Sin permisos</h1>
-          <p className="text-gray-500 text-sm mb-6">El correo <b>{session.user.email}</b> no está autorizado como administrador.</p>
-          <button onClick={handleLogout} className="px-6 py-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200">Cerrar sesión</button>
         </div>
       </div>
     );
@@ -126,9 +81,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
       <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-900">Panel de administración</h1>
-          <p className="text-gray-500 text-sm">
-            {demo ? <><i className="fa-solid fa-flask text-green-600 mr-1"></i>Modo demo (local)</> : session?.user.email}
-          </p>
+          <p className="text-gray-500 text-sm">{session?.user.email}</p>
         </div>
         <button onClick={handleLogout} className="px-4 py-2 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-sm">
           <i className="fa-solid fa-right-from-bracket mr-2"></i>Salir
