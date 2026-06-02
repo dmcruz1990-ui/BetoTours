@@ -1289,9 +1289,21 @@ const BlogManager: React.FC = () => {
           <input placeholder="Resumen corto (aparece en la tarjeta)" value={editing.excerpt}
             onChange={e => setEditing({ ...editing, excerpt: e.target.value })}
             className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
-          <input placeholder="URL de imagen de portada (opcional)" value={editing.cover_image}
-            onChange={e => setEditing({ ...editing, cover_image: e.target.value })}
-            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
+          <div>
+            <input placeholder="Enlace DIRECTO de la imagen de portada (debe terminar en .jpg, .png, .webp…)" value={editing.cover_image}
+              onChange={e => setEditing({ ...editing, cover_image: e.target.value })}
+              className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
+            <p className="text-xs text-gray-400 mt-1">
+              <i className="fa-solid fa-circle-info mr-1"></i>
+              En imgbb usa el <b>"Enlace directo"</b> (empieza con <code>https://i.ibb.co/…</code> y termina en .jpg/.png), no el de la página.
+            </p>
+            {editing.cover_image && (
+              <img src={editing.cover_image} alt="Vista previa"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                onLoad={(e) => { e.currentTarget.style.display = 'block'; }}
+                className="mt-3 h-40 w-full object-cover rounded-xl border border-gray-100" />
+            )}
+          </div>
           <textarea placeholder="Contenido del artículo..." value={editing.content} rows={12}
             onChange={e => setEditing({ ...editing, content: e.target.value })}
             className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none resize-y" />
