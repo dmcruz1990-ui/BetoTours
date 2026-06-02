@@ -66,7 +66,9 @@ Con esto, si el mismo correo llega dos veces, **no se duplica** (se actualiza).
 
 ## Script base (Google Apps Script)
 
-> Es un esqueleto: el `parseEmail` se afina con los correos reales de Beto.
+> ✅ El `parseEmail` ya está afinado con el **correo real de Ayenda**
+> (`no-responder@ayenda.co`). Funciona con el formato actual; si Ayenda cambia
+> el correo, se ajustan los textos de búsqueda.
 
 ```javascript
 const SUPABASE_URL = 'https://evodmxqehoyjfkiulrwf.supabase.co';
@@ -80,51 +82,53 @@ function procesarReservas() {
   label.getThreads(0, 30).forEach(thread => {
     thread.getMessages().forEach(msg => {
       if (!msg.isUnread()) return;
-      const data = parseEmail(msg);
+      const data = parseEmailAyenda(msg);
       if (data) enviarASupabase(data);
       msg.markRead();
     });
   });
 }
 
-// Extrae los datos del correo. AJUSTAR con los correos reales.
-function parseEmail(msg) {
+// Parser del correo real de Ayenda (no-responder@ayenda.co)
+function parseEmailAyenda(msg) {
   const body = msg.getPlainBody();
-  const subject = msg.getSubject();
+  const subject = msg.getSubject() || '';
+  const g = (re) => { const m = body.match(re); return m ? m[1].trim() : ''; };
 
-  const canal = /booking/i.test(body + subject) ? 'externo'
-              : /airbnb/i.test(body + subject)  ? 'externo'
-              : 'externo';
+  const ref = g(/N[uú]mero [UÚ]nico de Reserva:\s*(\d+)/i);
+  const checkin  = g(/Checkin:\s*(\d{4}-\d{2}-\d{2})/i);
+  const checkout = g(/Checkout:\s*(\d{4}-\d{2}-\d{2})/i);
+  if (!ref || !checkin || !checkout) return null; // no es un correo de reserva
 
-  // Ejemplos de extracción (regex a ajustar según el correo):
-  const ref     = (subject.match(/\b\d{6,}\b/) || [])[0] || Utilities.getUuid();
-  const nombre  = (body.match(/Hu[eé]sped:\s*(.+)/i) || [])[1] || 'Sin nombre';
-  const llegada = toISO((body.match(/Entrada:\s*([\d\/\-]+)/i) || [])[1]);
-  const salida  = toISO((body.match(/Salida:\s*([\d\/\-]+)/i) || [])[1]);
-  const apto    = (body.match(/Apartamento[:\s]*([0-9]{3}|Estudio \d+|Penthouse \d+)/i) || [])[1] || '';
-  const roomId  = (apto.match(/\d{3}/) || [])[0] || '301';
-
-  if (!llegada || !salida) return null;
+  const nombre   = g(/Nombre Completo:\s*(.+)/i) || subject.split(':').pop().trim();
+  const telefono = g(/Tel[eé]fonos?:\s*([+\d][\d\s-]*)/i);
+  const emailRaw = g(/Email:\s*(\S+)/i);
+  const email    = /@/.test(emailRaw) ? emailRaw : null;
+  const totalStr = g(/Total:\s*\$?\s*([\d.,]+)/i);
+  const total    = totalStr ? Number(totalStr.replace(/[^\d]/g, '')) : null;
+  const estado   = g(/Estado:\s*([A-Za-zÁÉÍÓÚáéíóú]+)/i).toLowerCase();
+  const status   = /cancel/.test(estado + ' ' + subject.toLowerCase()) ? 'cancelled'
+                 : /(confirm|ok|aprob)/.test(estado) ? 'confirmed' : 'pending';
+  const aptoText = g(/Reserva en\s+(.+?),\s*Medell[ií]n/i);
+  const roomId   = (aptoText.match(/\d{3}/) || [])[0]
+                 || (/penthouse/i.test(aptoText) ? '601'
+                 :  /casita/i.test(aptoText) ? 'casita'
+                 :  /finca/i.test(aptoText)  ? 'finca' : '');
 
   return {
-    external_ref: 'mail-' + ref,
+    external_ref: 'ayenda-' + ref,
     room_id: roomId,
-    room_name: apto || ('Aparta Suite ' + roomId),
+    room_name: aptoText,
     guest_name: nombre,
-    check_in: llegada,
-    check_out: salida,
+    guest_phone: telefono || null,
+    guest_email: email,
+    check_in: checkin,
+    check_out: checkout,
     guests: 1,
-    status: /cancel/i.test(subject + body) ? 'cancelled' : 'confirmed',
-    source: canal,
+    status: status,
+    source: 'ayenda',
+    note: 'Ref ' + ref,
   };
-}
-
-function toISO(s) {
-  if (!s) return null;
-  const m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if (!m) return null;
-  const y = m[3].length === 2 ? '20' + m[3] : m[3];
-  return y + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[1]).slice(-2);
 }
 
 function enviarASupabase(data) {
@@ -141,6 +145,13 @@ function enviarASupabase(data) {
   });
 }
 ```
+
+### Ejemplo real procesado (correo de Ayenda)
+```
+Emerson Castillo Velez · tel 3142793134 · Habitación 402
+Checkin 2026-06-02 → Checkout 2026-06-05 · $420.000 · Pendiente · Ref 4030668
+```
+
 
 ---
 
