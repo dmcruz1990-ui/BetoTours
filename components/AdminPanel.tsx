@@ -550,7 +550,12 @@ const Dashboard: React.FC<{ onGoImport: () => void }> = ({ onGoImport }) => {
 // ============ IMPORTADOR (pegar Excel/CSV de Ayenda/Booking) ============
 // Convierte una fecha DD/MM/AAAA a AAAA-MM-DD
 const parseDate = (s: string): string | null => {
-  const m = (s || '').trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  s = (s || '').trim();
+  // ISO: 2026-06-04 (con o sin hora después) — formato Booking
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  // dd/mm/aaaa o dd-mm-aaaa — formato Ayenda
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (!m) return null;
   const [, d, mo, y] = m;
   const yr = y.length === 2 ? '20' + y : y;
@@ -587,12 +592,12 @@ const RANDOM_ROOM = '__random__';
 
 // Parser robusto del formato Ayenda/Booking. Detecta cada campo por su contenido
 // (no por posición), así soporta filas sin email donde las columnas se corren.
-const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
+const parseAyenda = (text: string, roomId: string, channel: string = 'auto'): ParsedRow[] => {
   return text.split(/\r?\n/).map(line => line.trimEnd()).filter(l => l.trim() !== '').map((raw): ParsedRow => {
     const cols = (raw.includes('\t') ? raw.split('\t') : raw.split(/\s*[;,]\s*/)).map(s => s.trim());
     const idCell = cols[0] || '';
     // Saltar encabezado
-    if (/^reserva$/i.test(idCell) || (/cliente/i.test(cols[1] || '') && /desde|hasta|estado/i.test(raw.toLowerCase()))) {
+    if (/^(reserva|n[uú]mero de reserva)$/i.test(idCell) || (/cliente|reservado por/i.test(cols[1] || '') && /entrada|salida|desde|hasta|estado/i.test(raw.toLowerCase()))) {
       return { ok: false, reason: 'encabezado', raw };
     }
     const name = cols[1] || '';
@@ -602,13 +607,16 @@ const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
     const email = cols.find(c => /@/.test(c)) || null;
     const phone = cols.find((c, i) => i > 0 && c !== idCell && !/@/.test(c) && !parseDate(c) && /^\+?\d[\d\s\-]{6,}$/.test(c)) || null;
     const statusCell = cols.find(c => /^(ok|cancel|pend|confirm)/i.test(c)) || '';
-    const channelCell = cols.find(c => /booking|airbnb|expedia|despegar|ayenda|whats|web|directo|trivago|hotel/i.test(c)) || '';
-    const moneyCell = cols.find(c => /\$/.test(c) && (parseMoney(c) || 0) > 0) || '';
+    const detectedChannel = cols.find(c => /booking|airbnb|expedia|despegar|ayenda|whats|web|directo|trivago|hotel/i.test(c)) || '';
+    // Canal: el elegido en el importador manda; si está en "auto", se detecta del texto
+    const effChannel = channel !== 'auto' ? channel : detectedChannel;
+    // Precio: acepta $ o COP (formato Booking) — toma el primer monto > 0
+    const moneyCell = cols.find(c => /(\$|cop)/i.test(c) && (parseMoney(c) || 0) > 0) || '';
     // Asignación de habitación: fija, o "aleatoria" estable según la reserva (temporal)
     const isRandom = roomId === RANDOM_ROOM;
     const rid = isRandom ? ROOMS[hashStr(idCell + name) % ROOMS.length].id : roomId;
     const room = roomById(rid);
-    const refNote = idCell && /^\d+$/.test(idCell) ? `Ref ${idCell}${channelCell ? ' · ' + channelCell : ''}` : null;
+    const refNote = idCell && /^\d+$/.test(idCell) ? `Ref ${idCell}${effChannel ? ' · ' + effChannel : ''}` : (effChannel || null);
     return {
       ok: true, raw,
       r: {
@@ -620,7 +628,7 @@ const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
         check_in: dates[0], check_out: dates[1],
         guests: 1,
         status: mapStatus(statusCell),
-        source: mapSource(channelCell),
+        source: mapSource(effChannel),
         total: parseMoney(moneyCell),
         note: isRandom ? `${refNote ? refNote + ' · ' : ''}⚠️ habitación temporal` : refNote,
       },
@@ -631,11 +639,12 @@ const parseAyenda = (text: string, roomId: string): ParsedRow[] => {
 const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ onDone, onCancel }) => {
   const [text, setText] = useState('');
   const [roomId, setRoomId] = useState(RANDOM_ROOM);
+  const [channel, setChannel] = useState('auto');
   const [includeCancelled, setIncludeCancelled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
 
-  const parsed = text.trim() ? parseAyenda(text, roomId) : [];
+  const parsed = text.trim() ? parseAyenda(text, roomId, channel) : [];
   const valid = parsed.filter(p => p.ok);
   const toImport = valid.filter(p => includeCancelled || p.r.status !== 'cancelled');
   const skipped = parsed.filter(p => !p.ok && p.reason !== 'encabezado');
@@ -664,7 +673,16 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
             {ROOMS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </label>
-        <label className="text-sm font-bold text-gray-600 flex items-end gap-2 pb-3">
+        <label className="text-sm font-bold text-gray-600 flex flex-col gap-1">Canal
+          <select value={channel} onChange={e => setChannel(e.target.value)} className={inp + ' font-normal'}>
+            <option value="auto">Auto (detectar del texto)</option>
+            <option value="booking">Booking</option>
+            <option value="airbnb">Airbnb</option>
+            <option value="expedia">Expedia</option>
+            <option value="directa">Directa</option>
+          </select>
+        </label>
+        <label className="text-sm font-bold text-gray-600 flex items-center gap-2 sm:col-span-2">
           <input type="checkbox" checked={includeCancelled} onChange={e => setIncludeCancelled(e.target.checked)} className="w-5 h-5 accent-green-600" />
           Incluir reservas canceladas
         </label>
