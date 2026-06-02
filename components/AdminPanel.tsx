@@ -331,6 +331,24 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
 const money = (n: number | null | undefined) => '$' + (n || 0).toLocaleString('es-CO');
 const fullDate = (s: string) => { const d = new Date(s + 'T00:00:00'); return `${WEEKDAYS_ES[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0, 3).toLowerCase()}`; };
 
+// Mensaje de confirmación para enviar al huésped por WhatsApp
+const confirmacionWA = (r: Reservation) => {
+  const noches = r.nights ? `🌙 ${r.nights} noche${r.nights === 1 ? '' : 's'}\n` : '';
+  const valor = (r.total || 0) > 0 ? `💵 Total: ${money(r.total)}\n` : '';
+  return `¡Hola ${r.guest_name.split(' ')[0]}! 👋 Te confirmamos tu reserva en *Aparta Suites Torre de Prado* (Medellín) 🏨\n\n` +
+    `🏠 ${r.room_name || r.room_id}\n` +
+    `📅 Entrada: ${fullDate(r.check_in)}\n` +
+    `📅 Salida: ${fullDate(r.check_out)}\n` +
+    noches + valor +
+    `\n¡Te esperamos, parce! 🙌 Cualquier cosa nos escribes por aquí.`;
+};
+const waLink = (phone: string | null, text: string) => {
+  const p = (phone || '').replace(/\D/g, '');
+  if (!p) return '';
+  const full = p.length === 10 ? '57' + p : p; // si es celular colombiano sin indicativo
+  return `https://wa.me/${full}?text=${encodeURIComponent(text)}`;
+};
+
 const GuestRow: React.FC<{ r: Reservation; onClick?: () => void }> = ({ r, onClick }) => {
   const phone = (r.guest_phone || '').replace(/\D/g, '');
   const meta = STATUS_META[r.status];
@@ -393,7 +411,7 @@ const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose
           </div>
 
           <div className="flex flex-wrap gap-2 mt-5">
-            {phone && <a href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>WhatsApp</a>}
+            {phone && <a href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>Enviar confirmación</a>}
             {r.status !== 'confirmed' && <button disabled={busy} onClick={() => setStatus('confirmed')} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
             {r.status !== 'cancelled' && <button disabled={busy} onClick={() => setStatus('cancelled')} className="px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-sm hover:bg-amber-100 disabled:opacity-50"><i className="fa-solid fa-ban mr-1.5"></i>Cancelar</button>}
             {onEdit && <button onClick={onEdit} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200"><i className="fa-solid fa-pen mr-1.5"></i>Editar</button>}
