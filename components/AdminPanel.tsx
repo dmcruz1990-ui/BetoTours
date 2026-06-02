@@ -314,6 +314,11 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
             <option value="externo">Externo</option>
           </select>
         </label>
+        <label className="text-sm font-bold text-gray-600 sm:col-span-2">Valor / Precio total (opcional)
+          <input type="number" min={0} step={1000} value={f.total ?? ''} placeholder="Ej: 420000"
+            onChange={e => set('total', e.target.value === '' ? null : Number(e.target.value))}
+            className={inp + ' mt-1 font-normal'} />
+        </label>
         <label className="text-sm font-bold text-gray-600 sm:col-span-2">Nota (opcional)
           <textarea value={f.note || ''} onChange={e => set('note', e.target.value)} rows={2} className={inp + ' mt-1 font-normal resize-y'} />
         </label>
