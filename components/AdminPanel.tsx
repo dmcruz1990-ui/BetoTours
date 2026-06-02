@@ -620,18 +620,22 @@ const hashStr = (s: string): number => {
   return Math.abs(h);
 };
 const RANDOM_ROOM = '__random__';
+const EXPEDIA_ROUTE = '__expedia__';
 
 // Parser robusto: detecta encabezados (Expedia/Booking/Ayenda) o cae a modo por contenido.
 const parseAyenda = (text: string, roomId: string, channel: string = 'auto', typeMap: Record<string, string> = ROOM_TYPE_MAP): ParsedRow[] => {
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lines.length === 0) return [];
 
+  const expediaRoute = roomId === EXPEDIA_ROUTE;
+  if (expediaRoute && channel === 'auto') channel = 'expedia'; // enrutar por tipo + color naranja
   const isRandom = roomId === RANDOM_ROOM;
   const pickRoom = (roomRaw: string, seed: string): string => {
     const num = (roomRaw || '').match(/\d{3}/);
     if (num && ROOMS.find(r => r.id === num[0])) return num[0];
     const byType = resolveRoomFromType(roomRaw, typeMap);
     if (byType) return byType;
+    if (expediaRoute) return typeMap.basico || '301';
     return isRandom ? ROOMS[hashStr(seed) % ROOMS.length].id : roomId;
   };
   const buildRow = (r: any): ParsedRow => ({ ok: true, raw: '', r });
@@ -748,6 +752,7 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
         <label className="text-sm font-bold text-gray-600 flex flex-col gap-1">Asignar a la habitación
           <select value={roomId} onChange={e => setRoomId(e.target.value)} className={inp + ' font-normal'}>
             <option value={RANDOM_ROOM}>🎲 Aleatorio (temporal)</option>
+            <option value={EXPEDIA_ROUTE}>🏨 Expedia (enrutar por tipo)</option>
             {ROOMS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </label>
@@ -766,7 +771,7 @@ const ImportPanel: React.FC<{ onDone: () => void; onCancel: () => void; }> = ({ 
         </label>
       </div>
 
-      {channel === 'expedia' && (
+      {(channel === 'expedia' || roomId === EXPEDIA_ROUTE) && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4">
           <p className="text-xs font-bold text-orange-800 mb-2"><i className="fa-solid fa-shuffle mr-1"></i>Enrutar tipos de Expedia → apartamento:</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
