@@ -126,7 +126,9 @@ const AvailabilityManager: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
-  const [busyDay, setBusyDay] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<{ check_in: string; check_out: string; motivo: string } | null>(null);
+  const [detail, setDetail] = useState<Reservation | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -154,25 +156,34 @@ const AvailabilityManager: React.FC = () => {
   const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   const isToday = (d: number) => d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
 
-  const onDayClick = async (d: number) => {
+  const onDayClick = (d: number) => {
     const ds = ymd(year, month, d);
     const res = dayMap[ds];
-    if (res && !isBlock(res)) return; // ocupado por huésped: no se puede bloquear
-    setBusyDay(ds);
-    if (res && isBlock(res)) {
-      await supabase.from('reservations').delete().eq('id', res.id);
-    } else {
-      await supabase.from('reservations').insert({
-        room_id: roomId, room_name: room.name, guest_name: 'Bloqueado',
-        check_in: ds, check_out: addDaysStr(ds, 1), guests: 1,
-        status: 'confirmed', source: 'manual', note: 'Bloqueo',
-      });
-    }
-    await load();
-    setBusyDay(null);
+    if (res && !isBlock(res)) return;           // ocupado por huésped
+    if (res && isBlock(res)) { setDetail(res); return; } // ver/editar bloqueo
+    setForm({ check_in: ds, check_out: addDaysStr(ds, 1), motivo: '' }); // crear bloqueo
+  };
+
+  const guardarBloqueo = async () => {
+    if (!form || form.check_out <= form.check_in) return;
+    setSaving(true);
+    await supabase.from('reservations').insert({
+      room_id: roomId, room_name: room.name, guest_name: 'Bloqueado',
+      check_in: form.check_in, check_out: form.check_out, guests: 1,
+      status: 'confirmed', source: 'manual',
+      note: form.motivo.trim() ? 'Bloqueo: ' + form.motivo.trim() : 'Bloqueo',
+    });
+    setSaving(false); setForm(null); load();
+  };
+
+  const liberarBloqueo = async (r: Reservation) => {
+    setSaving(true);
+    await supabase.from('reservations').delete().eq('id', r.id);
+    setSaving(false); setDetail(null); load();
   };
 
   const blockedThisMonth = Object.entries(dayMap).filter(([d, r]) => d.startsWith(ymd(year, month, 1).slice(0, 7)) && isBlock(r)).length;
+  const inp = 'w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none';
 
   return (
     <div>
@@ -224,8 +235,8 @@ const AvailabilityManager: React.FC = () => {
                   : occupied ? 'bg-green-200 text-green-800 cursor-not-allowed opacity-70'
                   : 'bg-green-50 text-green-700 hover:bg-gray-200';
                 return (
-                  <button key={i} onClick={() => onDayClick(d)} disabled={busyDay === ds}
-                    title={blocked ? 'Bloqueado — clic para liberar' : occupied ? `Ocupado: ${res!.guest_name}` : 'Libre — clic para bloquear'}
+                  <button key={i} onClick={() => onDayClick(d)}
+                    title={blocked ? 'Bloqueado — clic para ver/liberar' : occupied ? `Ocupado: ${res!.guest_name}` : 'Libre — clic para bloquear'}
                     className={`aspect-square rounded-lg text-sm font-bold transition flex items-center justify-center ${cls} ${isToday(d) ? 'ring-2 ring-green-600' : ''}`}>
                     {blocked ? <i className="fa-solid fa-lock text-xs"></i> : d}
                   </button>
@@ -241,6 +252,55 @@ const AvailabilityManager: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Ventana: crear bloqueo (fecha + motivo) */}
+      {form && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setForm(null); }}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+            <h2 className="text-xl font-black text-gray-900 mb-1"><i className="fa-solid fa-lock text-gray-500 mr-2"></i>Bloquear días</h2>
+            <p className="text-sm text-gray-500 mb-4">{room.name}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-sm font-bold text-gray-600">Desde
+                <input type="date" value={form.check_in} onChange={e => setForm({ ...form, check_in: e.target.value })} className={inp + ' mt-1 font-normal'} />
+              </label>
+              <label className="text-sm font-bold text-gray-600">Hasta (salida)
+                <input type="date" value={form.check_out} onChange={e => setForm({ ...form, check_out: e.target.value })} className={inp + ' mt-1 font-normal'} />
+              </label>
+            </div>
+            <label className="text-sm font-bold text-gray-600 block mt-3">Motivo
+              <input value={form.motivo} onChange={e => setForm({ ...form, motivo: e.target.value })} placeholder="Ej: Mantenimiento, uso personal…" className={inp + ' mt-1 font-normal'} />
+            </label>
+            <p className="text-xs text-gray-400 mt-2">Tiempo: <b>{Math.max(0, nightsBetween(form.check_in, form.check_out).length)} día(s)</b></p>
+            <div className="flex gap-2 mt-5">
+              <button onClick={guardarBloqueo} disabled={saving || form.check_out <= form.check_in} className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50">{saving ? 'Guardando…' : 'Bloquear'}</button>
+              <button onClick={() => setForm(null)} className="px-5 py-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ventana: ver bloqueo (fecha, motivo, tiempo) */}
+      {detail && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setDetail(null); }}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-xl font-black text-gray-900"><i className="fa-solid fa-lock text-gray-500 mr-2"></i>Día bloqueado</h2>
+              <button onClick={() => setDetail(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+              <p><span className="text-gray-400 font-bold">Habitación:</span> <b>{detail.room_name || detail.room_id}</b></p>
+              <p><span className="text-gray-400 font-bold">Desde:</span> {fullDate(detail.check_in)}</p>
+              <p><span className="text-gray-400 font-bold">Hasta:</span> {fullDate(detail.check_out)}</p>
+              <p><span className="text-gray-400 font-bold">Tiempo:</span> {detail.nights || nightsBetween(detail.check_in, detail.check_out).length} día(s)</p>
+              <p><span className="text-gray-400 font-bold">Motivo:</span> {(detail.note || '').replace(/^bloqueo:?\s*/i, '') || 'Sin especificar'}</p>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => liberarBloqueo(detail)} disabled={saving} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50"><i className="fa-solid fa-lock-open mr-1.5"></i>{saving ? '...' : 'Liberar'}</button>
+              <button onClick={() => setDetail(null)} className="px-5 py-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1074,11 +1134,11 @@ const channelOf = (r: Reservation): string => {
 const barColor = (r: Reservation): { cls: string; label: string } => {
   if (isBlock(r)) return { cls: 'bg-gray-400 text-white', label: 'Bloqueado' };
   const ch = channelOf(r);
-  if (ch === 'booking') return { cls: 'bg-blue-500 text-white', label: 'Booking' };
-  if (ch === 'airbnb')  return { cls: 'bg-yellow-400 text-yellow-900', label: 'Airbnb' };
-  if (ch === 'expedia') return { cls: 'bg-orange-500 text-white', label: 'Expedia' };
-  if (r.status === 'pending') return { cls: 'bg-amber-400 text-white', label: 'Pendiente' };
-  if (r.status === 'confirmed') return { cls: 'bg-green-500 text-white', label: 'Reservado' };
+  if (ch === 'booking') return { cls: 'bg-blue-600 text-white shadow-sm', label: 'Booking' };
+  if (ch === 'airbnb')  return { cls: 'bg-yellow-400 text-gray-900 shadow-sm', label: 'Airbnb' };
+  if (ch === 'expedia') return { cls: 'bg-orange-500 text-white shadow-sm', label: 'Expedia' };
+  if (r.status === 'pending') return { cls: 'bg-amber-500 text-white shadow-sm', label: 'Pendiente' };
+  if (r.status === 'confirmed') return { cls: 'bg-emerald-600 text-white shadow-sm', label: 'Reservado' };
   return { cls: 'bg-gray-300 text-gray-700', label: '' };
 };
 
@@ -1190,10 +1250,10 @@ const TimelineBoard: React.FC = () => {
 
       {/* Leyenda */}
       <div className="flex items-center gap-4 mb-3 text-xs flex-wrap">
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-blue-500"></span>Booking</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-blue-600"></span>Booking</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-yellow-400"></span>Airbnb</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-orange-500"></span>Expedia</span>
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-green-500"></span>Directa</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-emerald-600"></span>Directa</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-amber-400"></span>Pendiente</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-gray-400"></span>Bloqueado</span>
       </div>
@@ -1434,10 +1494,10 @@ const RoomsCalendar: React.FC = () => {
           <div className="flex items-center justify-between flex-wrap gap-3 mt-5 pt-4 border-t border-gray-100 text-xs">
             <div className="flex items-center gap-3 flex-wrap">
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-50 border border-green-200"></span>Libre</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-500"></span>Booking</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-600"></span>Booking</span>
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-400"></span>Airbnb</span>
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-500"></span>Expedia</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-500"></span>Directa</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600"></span>Directa</span>
             </div>
             <span className="text-gray-500"><b className="text-red-500">{busyThisMonth}</b> noches ocupadas este mes</span>
           </div>
