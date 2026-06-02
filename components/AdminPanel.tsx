@@ -331,6 +331,9 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
 const money = (n: number | null | undefined) => '$' + (n || 0).toLocaleString('es-CO');
 const fullDate = (s: string) => { const d = new Date(s + 'T00:00:00'); return `${WEEKDAYS_ES[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0, 3).toLowerCase()}`; };
 
+// Número oficial de confirmación de Beto Tours / Aparta Suites
+const CONFIRM_PHONE = '573332482626';
+
 // Mensaje de confirmación para enviar al huésped por WhatsApp
 const confirmacionWA = (r: Reservation) => {
   const noches = r.nights ? `🌙 ${r.nights} noche${r.nights === 1 ? '' : 's'}\n` : '';
@@ -340,7 +343,7 @@ const confirmacionWA = (r: Reservation) => {
     `📅 Entrada: ${fullDate(r.check_in)}\n` +
     `📅 Salida: ${fullDate(r.check_out)}\n` +
     noches + valor +
-    `\n¡Te esperamos, parce! 🙌 Cualquier cosa nos escribes por aquí.`;
+    `\n📲 Por favor confírmanos al *+57 333 248 2626*.\n¡Te esperamos, parce! 🙌`;
 };
 const waLink = (phone: string | null, text: string) => {
   const p = (phone || '').replace(/\D/g, '');
