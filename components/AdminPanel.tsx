@@ -903,13 +903,29 @@ const TimelineBoard: React.FC = () => {
       {missing && <SetupBanner />}
 
       {/* Controles */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <button onClick={() => shift(-days)} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-left"></i></button>
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => shift(-days)} title="Atrás" className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-left"></i></button>
           <button onClick={() => setStart(todayStr())} className="px-3 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold">Hoy</button>
-          <button onClick={() => shift(days)} className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-right"></i></button>
-          <span className="text-sm font-bold text-gray-700 ml-1">{fmtDate(start)} → {fmtDate(addDaysStr(start, days - 1))}</span>
+          <button onClick={() => shift(days)} title="Adelante" className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"><i className="fa-solid fa-chevron-right"></i></button>
+
+          {/* Saltar a un mes/año */}
+          <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-1">
+            <i className="fa-solid fa-calendar-days text-green-600"></i>Mes:
+            <input type="month" value={start.slice(0, 7)}
+              onChange={e => { if (e.target.value) { setStart(e.target.value + '-01'); setDays(30); } }}
+              className="h-9 px-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-700 focus:ring-2 focus:ring-green-500 focus:outline-none" />
+          </label>
+
+          {/* Saltar a un día exacto */}
+          <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500">
+            <i className="fa-solid fa-calendar-day text-green-600"></i>Día:
+            <input type="date" value={start}
+              onChange={e => { if (e.target.value) setStart(e.target.value); }}
+              className="h-9 px-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-700 focus:ring-2 focus:ring-green-500 focus:outline-none" />
+          </label>
         </div>
+
         <div className="flex items-center gap-2 text-xs">
           <span className="text-gray-400 font-bold">Ver:</span>
           {[7, 14, 30].map(n => (
@@ -917,6 +933,9 @@ const TimelineBoard: React.FC = () => {
           ))}
         </div>
       </div>
+      <p className="text-xs text-gray-500 font-bold mb-3 capitalize">
+        {new Date(start + 'T00:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })} → {new Date(addDaysStr(start, days - 1) + 'T00:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
+      </p>
 
       {/* Leyenda */}
       <div className="flex items-center gap-4 mb-3 text-xs flex-wrap">
