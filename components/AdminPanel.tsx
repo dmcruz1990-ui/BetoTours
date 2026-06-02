@@ -874,13 +874,25 @@ const ReservationsManager: React.FC = () => {
 };
 
 // ============ TABLERO (TIMELINE estilo channel manager) ============
-// Color de la barra según estado/origen (igual que la leyenda de Ayenda)
+// Detecta el canal de la reserva (Booking / Airbnb / Expedia) por origen, nota o correo
+const channelOf = (r: Reservation): string => {
+  const s = ((r.source || '') + ' ' + (r.note || '') + ' ' + (r.guest_email || '')).toLowerCase();
+  if (/airbnb/.test(s)) return 'airbnb';
+  if (/expedia/.test(s)) return 'expedia';
+  if (/booking/.test(s)) return 'booking';
+  return '';
+};
+
+// Color de la barra: por canal (Booking azul, Airbnb dorado, Expedia naranja) y si no, por estado
 const barColor = (r: Reservation): { cls: string; label: string } => {
   if (/bloque/i.test(r.guest_name) || /bloque/i.test(r.note || '')) return { cls: 'bg-red-300 text-red-900', label: 'Bloqueado' };
-  if (r.source === 'ayenda' || r.source === 'externo') return { cls: 'bg-blue-300 text-blue-900', label: 'Externo' };
+  const ch = channelOf(r);
+  if (ch === 'booking') return { cls: 'bg-blue-500 text-white', label: 'Booking' };
+  if (ch === 'airbnb')  return { cls: 'bg-yellow-400 text-yellow-900', label: 'Airbnb' };
+  if (ch === 'expedia') return { cls: 'bg-orange-500 text-white', label: 'Expedia' };
   if (r.status === 'pending') return { cls: 'bg-amber-400 text-white', label: 'Pendiente' };
-  if (r.status === 'confirmed') return { cls: 'bg-green-400 text-white', label: 'Reservado' };
-  return { cls: 'bg-gray-200 text-gray-700', label: '' };
+  if (r.status === 'confirmed') return { cls: 'bg-green-500 text-white', label: 'Reservado' };
+  return { cls: 'bg-gray-300 text-gray-700', label: '' };
 };
 
 const TimelineBoard: React.FC = () => {
@@ -968,9 +980,11 @@ const TimelineBoard: React.FC = () => {
 
       {/* Leyenda */}
       <div className="flex items-center gap-4 mb-3 text-xs flex-wrap">
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-green-400"></span>Reservado</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-blue-500"></span>Booking</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-yellow-400"></span>Airbnb</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-orange-500"></span>Expedia</span>
+        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-green-500"></span>Directa</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-amber-400"></span>Pendiente</span>
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-blue-300"></span>Externo</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-red-300"></span>Bloqueado</span>
       </div>
 
@@ -1183,9 +1197,10 @@ const RoomsCalendar: React.FC = () => {
                 if (d === null) return <div key={i} />;
                 const dateStr = ymd(year, month, d);
                 const res = dayMap[dateStr];
-                const cellCls = res ? STATUS_META[res.status].cell : 'bg-green-50 text-green-700 hover:bg-green-100';
+                const meta = res ? barColor(res) : null;
+                const cellCls = meta ? meta.cls : 'bg-green-50 text-green-700 hover:bg-green-100';
                 return (
-                  <button key={i} onClick={() => onDayClick(d)} title={res ? `${res.guest_name} (${STATUS_META[res.status].label})` : 'Libre — clic para reservar'}
+                  <button key={i} onClick={() => onDayClick(d)} title={res ? `${res.guest_name} (${meta!.label})` : 'Libre — clic para reservar'}
                     className={`aspect-square rounded-lg text-sm font-bold transition flex items-center justify-center ${cellCls} ${isToday(d) ? 'ring-2 ring-green-600' : ''}`}>
                     {d}
                   </button>
@@ -1195,10 +1210,12 @@ const RoomsCalendar: React.FC = () => {
           )}
 
           <div className="flex items-center justify-between flex-wrap gap-3 mt-5 pt-4 border-t border-gray-100 text-xs">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 flex-wrap">
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-50 border border-green-200"></span>Libre</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-400"></span>Pendiente</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500"></span>Confirmada</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-500"></span>Booking</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-400"></span>Airbnb</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-500"></span>Expedia</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-500"></span>Directa</span>
             </div>
             <span className="text-gray-500"><b className="text-red-500">{busyThisMonth}</b> noches ocupadas este mes</span>
           </div>
