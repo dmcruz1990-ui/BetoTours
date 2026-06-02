@@ -46,7 +46,9 @@ const Blog: React.FC<BlogProps> = ({ language }) => {
           <i className="fa-solid fa-arrow-left"></i> {t.back}
         </button>
         {active.cover_image && (
-          <img src={active.cover_image} alt={active.title} className="w-full h-72 object-cover rounded-2xl mb-6 shadow-lg" />
+          <img src={active.cover_image} alt={active.title}
+            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://i.ibb.co/2Y8Ndq5Q/5.jpg'; }}
+            className="w-full h-72 object-cover rounded-2xl mb-6 shadow-lg" />
         )}
         <p className="text-sm text-gray-400 font-semibold mb-2">{fmtDate(active.created_at)} · {active.author}</p>
         <h1 className="text-4xl font-black mb-6 text-gray-900">{active.title}</h1>
@@ -89,6 +91,7 @@ const Blog: React.FC<BlogProps> = ({ language }) => {
               <img
                 src={post.cover_image || 'https://i.ibb.co/2Y8Ndq5Q/5.jpg'}
                 alt={post.title}
+                onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://i.ibb.co/2Y8Ndq5Q/5.jpg'; }}
                 className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
               />
             </div>
