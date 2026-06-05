@@ -399,6 +399,7 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
       check_in: f.check_in, check_out: f.check_out, guests: f.guests || 1,
       status: f.status || 'pending', source: f.source || 'manual',
       total: f.total ?? null, note: f.note || null,
+      doc_type: f.doc_type || null, doc_number: f.doc_number || null, nationality: f.nationality || null,
     };
     const { error } = f.id
       ? await supabase.from('reservations').update(payload).eq('id', f.id)
@@ -436,6 +437,22 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
         </label>
         <label className="text-sm font-bold text-gray-600">Correo (opcional)
           <input type="email" value={f.guest_email || ''} onChange={e => set('guest_email', e.target.value)} className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600">Tipo de documento
+          <select value={f.doc_type || ''} onChange={e => set('doc_type', e.target.value)} className={inp + ' mt-1 font-normal'}>
+            <option value="">—</option>
+            <option value="CC">CC (Cédula)</option>
+            <option value="CE">CE (Cédula extranjería)</option>
+            <option value="Pasaporte">Pasaporte</option>
+            <option value="TI">TI</option>
+            <option value="NIT">NIT</option>
+          </select>
+        </label>
+        <label className="text-sm font-bold text-gray-600">N° de documento
+          <input value={f.doc_number || ''} onChange={e => set('doc_number', e.target.value)} placeholder="Documento" className={inp + ' mt-1 font-normal'} />
+        </label>
+        <label className="text-sm font-bold text-gray-600 sm:col-span-2">Nacionalidad
+          <input value={f.nationality || ''} onChange={e => set('nationality', e.target.value)} placeholder="Ej: Colombiana" className={inp + ' mt-1 font-normal'} />
         </label>
         <label className="text-sm font-bold text-gray-600">Estado
           <select value={f.status} onChange={e => set('status', e.target.value)} className={inp + ' mt-1 font-normal'}>
@@ -509,7 +526,9 @@ const generarReporteHuespedes = (res: Reservation[], periodo: string) => {
   const rows = filas.map((r, i) => `<tr>
     <td>${i + 1}</td>
     <td>${r.guest_name}</td>
-    <td></td><td></td><td></td>
+    <td style="text-align:center">${r.doc_type || ''}</td>
+    <td>${r.doc_number || ''}</td>
+    <td>${r.nationality || ''}</td>
     <td style="text-align:center">${r.room_id}</td>
     <td>${fullDate(r.check_in)}</td>
     <td>${fullDate(r.check_out)}</td>
@@ -560,6 +579,37 @@ const generarReporteHuespedes = (res: Reservation[], periodo: string) => {
   w.document.write(html); w.document.close();
 };
 const SOURCE_LABELS: Record<string, string> = { web: 'Directa (Web)', whatsapp: 'WhatsApp', ayenda: 'Ayenda', externo: 'Externo', manual: 'Directa', booking: 'Booking', airbnb: 'Airbnb', expedia: 'Expedia' };
+const STATUS_TXT: Record<string, string> = { confirmed: 'Confirmada', pending: 'Pendiente', cancelled: 'Cancelada' };
+
+// Historial completo de reservas (imprimible / descargable)
+const generarHistorial = (res: Reservation[]) => {
+  const w = window.open('', '_blank', 'width=1000,height=800');
+  if (!w) { alert('Permite las ventanas emergentes para generar el historial.'); return; }
+  const filas = res.slice().sort((a, b) => b.check_in.localeCompare(a.check_in));
+  const total = filas.reduce((s, r) => s + (r.total || 0), 0);
+  const rows = filas.map((r, i) => `<tr>
+    <td>${i + 1}</td><td>${r.guest_name}</td><td style="text-align:center">${r.room_id}</td>
+    <td>${fullDate(r.check_in)}</td><td>${fullDate(r.check_out)}</td>
+    <td style="text-align:center">${r.nights || nightsBetween(r.check_in, r.check_out).length}</td>
+    <td>${SOURCE_LABELS[channelOf(r) || r.source] || r.source}</td>
+    <td>${STATUS_TXT[r.status] || r.status}</td>
+    <td style="text-align:right">${(r.total || 0) > 0 ? money(r.total) : '—'}</td></tr>`).join('');
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Historial de reservas</title>
+  <style>*{font-family:Arial,sans-serif}body{margin:0;padding:24px;font-size:11px;color:#1e293b}
+  h1{color:#15803d;font-size:18px;margin:0 0 4px}.sub{color:#64748b;font-size:11px;margin-bottom:14px}
+  table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #cbd5e1;padding:5px}
+  th{background:#f0fdf4;text-transform:uppercase;font-size:9px;color:#166534;text-align:left}
+  .btn{background:#16a34a;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:bold;cursor:pointer}
+  @media print{.no-print{display:none}}</style></head><body>
+  <div class="no-print" style="text-align:right;margin-bottom:10px"><button class="btn" onclick="window.print()">⬇️ Descargar / Imprimir PDF</button></div>
+  <h1>Historial de reservas — ${HOTEL.name}</h1>
+  <p class="sub">Total: ${filas.length} reservas · Generado ${new Date().toLocaleDateString('es-CO')}</p>
+  <table><thead><tr><th>#</th><th>Huésped</th><th>Hab.</th><th>Entrada</th><th>Salida</th><th>Noches</th><th>Canal</th><th>Estado</th><th>Valor</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="9" style="text-align:center;padding:20px">Sin reservas.</td></tr>'}</tbody>
+  <tfoot><tr style="font-weight:bold"><td colspan="8" style="text-align:right;padding:6px">TOTAL</td><td style="text-align:right">${money(total)}</td></tr></tfoot>
+  </table></body></html>`;
+  w.document.write(html); w.document.close();
+};
 
 // Genera una confirmación imprimible (Guardar como PDF) estilo Booking
 const generarPDF = (r: Reservation) => {
@@ -1183,7 +1233,10 @@ const ReservationsManager: React.FC = () => {
             </button>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => generarHistorial(items)} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 text-sm">
+            <i className="fa-solid fa-file-arrow-down mr-2"></i>Historial
+          </button>
           <button onClick={() => setImporting(true)} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 text-sm">
             <i className="fa-solid fa-file-import mr-2"></i>Importar
           </button>
