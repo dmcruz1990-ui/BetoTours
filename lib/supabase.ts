@@ -52,5 +52,8 @@ export interface Reservation {
   source: ReservationSource;
   total: number | null;
   note: string | null;
+  doc_type?: string | null;     // CC, CE, Pasaporte…
+  doc_number?: string | null;
+  nationality?: string | null;
   created_at: string;
 }
