@@ -705,7 +705,7 @@ const GuestRow: React.FC<{ r: Reservation; onClick?: () => void }> = ({ r, onCli
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.chip}`}>{meta.label}</span>
-        {phone && <a onClick={e => e.stopPropagation()} href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm"><i className="fa-brands fa-whatsapp"></i></a>}
+        {phone && <a onClick={e => e.stopPropagation()} href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm"><i className="fa-brands fa-whatsapp"></i></a>}
       </div>
     </div>
   );
@@ -1304,7 +1304,7 @@ const ReservationsManager: React.FC = () => {
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   {phone && (
-                    <a href={`https://wa.me/57${phone}`} target="_blank" rel="noopener noreferrer" title="WhatsApp"
+                    <a href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" title="Enviar confirmación por WhatsApp"
                       className="px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 text-sm font-bold"><i className="fa-brands fa-whatsapp"></i></a>
                   )}
                   {(r.source === 'manual' || r.source === 'web') && r.status !== 'confirmed' && (
