@@ -498,7 +498,67 @@ const waLink = (phone: string | null, text: string) => {
 };
 
 // Datos del hotel para el PDF de confirmación
-const HOTEL = { name: 'Aparta Suites Torre de Prado', address: 'Carrera 47 # 64-41, Medellín, Colombia', phone: '+57 333 248 2626' };
+const HOTEL = { name: 'Aparta Suites Torre de Prado', address: 'Carrera 47 # 64-41, Medellín, Colombia', phone: '+57 333 248 2626', rnt: '', nit: '' };
+
+// Reporte / Registro Nacional de Huéspedes (Ley 300 de 1996) — imprimible para descargar
+const generarReporteHuespedes = (res: Reservation[], periodo: string) => {
+  const w = window.open('', '_blank', 'width=1000,height=800');
+  if (!w) { alert('Permite las ventanas emergentes para generar el reporte.'); return; }
+  const filas = res.slice().sort((a, b) => a.check_in.localeCompare(b.check_in));
+  const totalNoches = filas.reduce((s, r) => s + (r.nights || nightsBetween(r.check_in, r.check_out).length), 0);
+  const rows = filas.map((r, i) => `<tr>
+    <td>${i + 1}</td>
+    <td>${r.guest_name}</td>
+    <td></td><td></td><td></td>
+    <td style="text-align:center">${r.room_id}</td>
+    <td>${fullDate(r.check_in)}</td>
+    <td>${fullDate(r.check_out)}</td>
+    <td style="text-align:center">${r.nights || nightsBetween(r.check_in, r.check_out).length}</td>
+    <td style="text-align:center">${r.guests || 1}</td>
+    <td>${r.guest_phone || ''}</td>
+    <td></td>
+  </tr>`).join('');
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Registro de Huéspedes ${periodo}</title>
+  <style>
+    *{font-family:Arial,sans-serif;box-sizing:border-box}
+    body{margin:0;padding:24px;color:#1e293b;font-size:12px}
+    .head{text-align:center;border-bottom:3px solid #16a34a;padding-bottom:12px;margin-bottom:8px}
+    .head h1{margin:0;font-size:18px;color:#15803d}
+    .head h2{margin:4px 0;font-size:14px}
+    .meta{display:flex;justify-content:space-between;font-size:11px;color:#475569;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;font-size:10px}
+    th,td{border:1px solid #cbd5e1;padding:5px;text-align:left}
+    th{background:#f0fdf4;font-size:9px;text-transform:uppercase;color:#166534}
+    .foot{margin-top:16px;font-size:10px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:10px}
+    .btn{background:#16a34a;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:bold;cursor:pointer}
+    @media print{.no-print{display:none}}
+  </style></head><body>
+  <div class="no-print" style="text-align:right;margin-bottom:10px"><button class="btn" onclick="window.print()">⬇️ Descargar / Imprimir PDF</button></div>
+  <div class="head">
+    <h1>REGISTRO NACIONAL DE HUÉSPEDES</h1>
+    <h2>${HOTEL.name}</h2>
+    <p style="margin:2px 0;font-size:11px">${HOTEL.address} · Tel: ${HOTEL.phone}</p>
+  </div>
+  <div class="meta">
+    <span><b>RNT:</b> ${HOTEL.rnt || '________________'}　<b>NIT:</b> ${HOTEL.nit || '________________'}</span>
+    <span><b>Período:</b> ${periodo}　<b>Generado:</b> ${new Date().toLocaleDateString('es-CO')}</span>
+  </div>
+  <table>
+    <thead><tr>
+      <th>#</th><th>Nombre del huésped</th><th>Tipo doc.</th><th>N° documento</th><th>Nacionalidad</th>
+      <th>Hab.</th><th>Entrada</th><th>Salida</th><th>Noches</th><th>Pers.</th><th>Teléfono</th><th>Firma</th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="12" style="text-align:center;padding:20px">Sin huéspedes en el período.</td></tr>'}</tbody>
+  </table>
+  <p style="margin-top:8px;font-size:11px"><b>Total huéspedes:</b> ${filas.length}　<b>Total noches:</b> ${totalNoches}</p>
+  <div class="foot">
+    Documento generado para el cumplimiento del <b>Registro Nacional de Huéspedes</b> (Ley 300 de 1996, art. 87 y normas concordantes).
+    Para huéspedes extranjeros, recuerde reportar a <b>Migración Colombia (SIRE)</b>.
+    Complete los campos de documento y nacionalidad según la tarjeta de registro de cada huésped.
+  </div>
+  </body></html>`;
+  w.document.write(html); w.document.close();
+};
 const SOURCE_LABELS: Record<string, string> = { web: 'Directa (Web)', whatsapp: 'WhatsApp', ayenda: 'Ayenda', externo: 'Externo', manual: 'Directa', booking: 'Booking', airbnb: 'Airbnb', expedia: 'Expedia' };
 
 // Genera una confirmación imprimible (Guardar como PDF) estilo Booking
@@ -1706,7 +1766,12 @@ const Contabilidad: React.FC = () => {
           <h2 className="text-xl font-black text-gray-900"><i className="fa-solid fa-chart-line text-green-600 mr-2"></i>Contabilidad</h2>
           <p className="text-gray-500 text-sm capitalize">{mesNombre}</p>
         </div>
-        <input type="month" value={ym} onChange={e => setYm(e.target.value)} className="h-10 px-3 border border-gray-200 rounded-xl text-sm font-bold text-gray-700" />
+        <div className="flex items-center gap-2">
+          <button onClick={() => generarReporteHuespedes(delMes, mesNombre)} className="h-10 px-4 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700">
+            <i className="fa-solid fa-file-lines mr-1.5"></i>Reporte huéspedes
+          </button>
+          <input type="month" value={ym} onChange={e => setYm(e.target.value)} className="h-10 px-3 border border-gray-200 rounded-xl text-sm font-bold text-gray-700" />
+        </div>
       </div>
 
       {/* Tarjetas resumen */}
