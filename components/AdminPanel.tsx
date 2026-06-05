@@ -13,7 +13,7 @@ const slugify = (s: string) =>
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'blog'>('inicio');
+  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'checkins' | 'blog'>('inicio');
 
   // Login real (Supabase Auth)
   const [email, setEmail] = useState('');
@@ -107,12 +107,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('conta')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'conta' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-chart-line mr-2"></i>Contabilidad
         </button>
+        <button onClick={() => setTab('checkins')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'checkins' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-id-card mr-2"></i>Check-ins
+        </button>
         <button onClick={() => setTab('blog')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'blog' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-newspaper mr-2"></i>Blog
         </button>
       </div>
 
-      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : <BlogManager />}
+      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : <BlogManager />}
     </div>
   );
 };
@@ -1995,6 +1998,135 @@ const Contabilidad: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============ CHECK-INS (registros de huéspedes) ============
+const CONTRATO = [
+  ['1. Registro', 'Solo deben hospedarse la cantidad exacta de personas declaradas en la reserva. Personas adicionales pueden generar tarifa extra. La estadía es únicamente por los días reservados; el alojamiento no puede convertirse en residencia.'],
+  ['2. Llegada y Salida', 'El huésped debe desalojar antes de la hora de salida establecida. Pasado ese tiempo, el anfitrión podrá cobrar un cargo extra según tarifas.'],
+  ['3. Ruido', 'El huésped debe mantener un comportamiento respetuoso hacia los demás huéspedes y vecinos.'],
+  ['4. Niños', 'Los huéspedes con menores deben velar por ellos en todo momento y son responsables de cualquier accidente dentro del alojamiento.'],
+  ['5. No fumar / sustancias / armas', 'Prohibido fumar (aplica tarifa de recuperación), usar sustancias ilegales o ingresar armas de cualquier tipo.'],
+  ['6. Inspecciones', 'El administrador puede ingresar, con previo aviso, para inspeccionar o realizar reparaciones y mantenimiento.'],
+  ['7. Daños', 'El huésped deja el alojamiento en buenas condiciones y es responsable de artículos faltantes o rotos y de las acciones de sus acompañantes. Pérdida de llaves genera tarifa de reposición.'],
+  ['8. Mascotas', 'El anfitrión se reserva el derecho de aceptar o no mascotas; puede aplicar tarifa adicional.'],
+  ['9. Liberación de responsabilidad', 'El anfitrión no se responsabiliza por pérdida de valores ni por inconvenientes por circunstancias fortuitas (agua, gas, luz, internet). El huésped debe cerrar ventanas y puertas al salir.'],
+  ['10. Abuso sexual', 'Se prohíbe totalmente la explotación sexual de menores; se denunciará ante las autoridades cualquier sospecha.'],
+  ['11. Check-in y Check-out', 'Check-in 3:00 p.m. · Check-out 11:00 a.m. Salidas tardías sujetas a disponibilidad y costo adicional.'],
+  ['12. Visitantes', 'No se permite el ingreso de visitantes no registrados sin autorización previa.'],
+  ['13. Parqueadero', 'Sujeto a disponibilidad. Carro $17.000/noche · Moto $8.000/noche. Parqueadero alterno a ~3 cuadras.'],
+  ['14. Cámaras de seguridad', 'El edificio cuenta con cámaras de seguridad en zonas comunes.'],
+  ['15. Aceptación electrónica', 'La firma digital tiene la misma validez que una firma manuscrita para efectos de este contrato.'],
+];
+
+const contratoPDF = (reg: any) => {
+  const w = window.open('', '_blank', 'width=900,height=900');
+  if (!w) { alert('Permite las ventanas emergentes.'); return; }
+  const clausulas = CONTRATO.map(([t, d]) => `<p style="margin:7px 0"><b>${t}.</b> ${d}</p>`).join('');
+  const firmado = reg.signed_at ? new Date(reg.signed_at).toLocaleString('es-CO') : '';
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Contrato ${reg.nombre}</title>
+  <style>*{font-family:Arial,sans-serif}body{margin:0;padding:28px;color:#1e293b;font-size:12px;line-height:1.45}
+  .h{text-align:center;border-bottom:3px solid #16a34a;padding-bottom:10px;margin-bottom:14px}
+  .h h1{margin:0;font-size:17px;color:#15803d}.h p{margin:3px 0;font-size:11px;color:#475569}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:11px}td{border:1px solid #e2e8f0;padding:6px}.l{background:#f8fafc;font-weight:bold;width:30%}
+  .firma{display:flex;gap:24px;margin-top:20px;align-items:flex-end}
+  .firma img{border:1px solid #e2e8f0;border-radius:8px;max-height:90px}
+  .btn{background:#16a34a;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:bold;cursor:pointer}
+  @media print{.no-print{display:none}}</style></head><body>
+  <div class="no-print" style="text-align:right;margin-bottom:10px"><button class="btn" onclick="window.print()">⬇️ Descargar / Imprimir PDF</button></div>
+  <div class="h"><h1>CONTRATO HOTELERO — ${HOTEL.name}</h1><p>${HOTEL.address} · ${HOTEL.phone}</p></div>
+  <table>
+    <tr><td class="l">Huésped</td><td>${reg.nombre || ''}</td></tr>
+    <tr><td class="l">Documento</td><td>${reg.doc_type || ''} ${reg.doc_number || ''}</td></tr>
+    <tr><td class="l">Nacionalidad</td><td>${reg.nationality || ''}</td></tr>
+    <tr><td class="l">Teléfono / Correo</td><td>${reg.phone || ''} ${reg.email ? '· ' + reg.email : ''}</td></tr>
+    <tr><td class="l">Acompañantes</td><td>${reg.acompanantes ?? ''}</td></tr>
+    <tr><td class="l">Procedencia / Motivo</td><td>${reg.procedencia || ''} ${reg.motivo ? '· ' + reg.motivo : ''}</td></tr>
+  </table>
+  <div style="margin-top:8px">${clausulas}</div>
+  <div class="firma">
+    <div>${reg.signature ? `<img src="${reg.signature}">` : ''}<div style="border-top:1px solid #1e293b;margin-top:4px;padding-top:3px;font-size:11px">Firma del huésped</div></div>
+    <div style="font-size:10px;color:#64748b">Aceptado electrónicamente${firmado ? ' el ' + firmado : ''}${reg.ip ? ' · IP ' + reg.ip : ''}.<br>La firma digital tiene la misma validez que una manuscrita (cláusula 15).</div>
+  </div>
+  </body></html>`;
+  w.document.write(html); w.document.close();
+};
+
+const Checkins: React.FC = () => {
+  const [regs, setRegs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+  const [detail, setDetail] = useState<any | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('guest_registrations').select('*').order('created_at', { ascending: false });
+    if (error && isMissingTable(error)) { setMissing(true); setRegs([]); }
+    else { setMissing(false); setRegs((data as any[]) || []); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
+
+  return (
+    <div>
+      {missing ? (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-5 text-sm">
+          <p className="font-black mb-1"><i className="fa-solid fa-database mr-2"></i>Falta crear la tabla de check-ins</p>
+          <p>Corre en Supabase el SQL de <code className="bg-amber-100 px-1 rounded">guest_registrations</code> (tabla + bucket de documentos) que te pasé en el chat.</p>
+        </div>
+      ) : regs.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <i className="fa-solid fa-id-card text-4xl mb-3"></i>
+          <p className="font-bold">Aún no hay check-ins recibidos.</p>
+          <p className="text-xs mt-1">Envía el link de registro a tus huéspedes desde la ficha de la reserva (botón "Registro").</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {regs.map(r => (
+            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-black text-gray-900 truncate">{r.nombre}</p>
+                <p className="text-sm text-gray-500">{r.doc_type} {r.doc_number} · {r.nationality} · <i className="fa-solid fa-phone mr-1"></i>{r.phone}</p>
+                <p className="text-xs text-gray-400">{new Date(r.created_at).toLocaleString('es-CO')}{r.acompanantes ? ` · ${r.acompanantes} acomp.` : ''}{r.hora_llegada ? ` · llega ${r.hora_llegada}` : ''}</p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                {r.signature && <span title="Firmado" className="px-2 py-2 text-green-600"><i className="fa-solid fa-signature"></i></span>}
+                <button onClick={() => setDetail(r)} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-bold"><i className="fa-solid fa-eye"></i></button>
+                <button onClick={() => contratoPDF(r)} className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold"><i className="fa-solid fa-file-pdf mr-1"></i>Contrato</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {detail && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setDetail(null); }}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-auto p-6">
+            <div className="flex items-start justify-between mb-3">
+              <h2 className="text-xl font-black text-gray-900">{detail.nombre}</h2>
+              <button onClick={() => setDetail(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1.5">
+              <p><b className="text-gray-400">Documento:</b> {detail.doc_type} {detail.doc_number}</p>
+              <p><b className="text-gray-400">Nacionalidad:</b> {detail.nationality}</p>
+              <p><b className="text-gray-400">Teléfono:</b> {detail.phone}{detail.email ? ` · ${detail.email}` : ''}</p>
+              <p><b className="text-gray-400">Acompañantes:</b> {detail.acompanantes ?? '—'} · <b className="text-gray-400">Llegada:</b> {detail.hora_llegada || '—'}</p>
+              <p><b className="text-gray-400">Procedencia:</b> {detail.procedencia || '—'} · <b className="text-gray-400">Motivo:</b> {detail.motivo || '—'}</p>
+              {detail.signed_at && <p className="text-xs text-gray-400">Firmado {new Date(detail.signed_at).toLocaleString('es-CO')}{detail.ip ? ` · IP ${detail.ip}` : ''}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              {detail.doc_front && <a href={detail.doc_front} target="_blank" rel="noopener noreferrer"><img src={detail.doc_front} className="w-full h-28 object-cover rounded-lg border border-gray-100" /><p className="text-[10px] text-center text-gray-400 mt-1">Documento (frente)</p></a>}
+              {detail.doc_back && <a href={detail.doc_back} target="_blank" rel="noopener noreferrer"><img src={detail.doc_back} className="w-full h-28 object-cover rounded-lg border border-gray-100" /><p className="text-[10px] text-center text-gray-400 mt-1">Documento (reverso)</p></a>}
+            </div>
+            {detail.signature && <div className="mt-3"><p className="text-[11px] text-gray-400 font-bold mb-1">Firma:</p><img src={detail.signature} className="border border-gray-100 rounded-lg max-h-24" /></div>}
+            <button onClick={() => contratoPDF(detail)} className="w-full mt-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700"><i className="fa-solid fa-file-pdf mr-1.5"></i>Descargar contrato firmado (PDF)</button>
           </div>
         </div>
       )}
