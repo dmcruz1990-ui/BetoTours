@@ -511,8 +511,14 @@ const confirmacionWA = (r: Reservation) => {
     `• Check-in: desde las 3:00 p.m.\n` +
     `• Check-out: hasta las 11:00 a.m.\n\n` +
     `🚗 *Parqueadero*\n` +
-    `Contamos con parqueadero sujeto a disponibilidad al momento de tu llegada. Valor: $17.000 COP por noche.\n` +
+    `Contamos con parqueadero sujeto a disponibilidad al momento de tu llegada.\n` +
+    `• Automóvil: $17.000 COP por noche\n` +
+    `• Motocicleta: $8.000 COP por noche\n` +
     `Si no hay disponibilidad, existe un parqueadero privado a ~3 cuadras del alojamiento, donde también podrás estacionar tu vehículo de forma segura.\n\n` +
+    `🏨 *Reservas directas*\n` +
+    `Para futuras estadías, reserva directamente con nosotros en:\n` +
+    `https://betotours.com/alojamientos.html\n` +
+    `Reservando directo accedes a nuestras mejores tarifas y atención personalizada.\n\n` +
     `🎒 *Tours y experiencias en Medellín*\n` +
     `Durante tu estadía también puedes reservar nuestros tours y actividades en:\n` +
     `www.betotours.com\n\n` +
