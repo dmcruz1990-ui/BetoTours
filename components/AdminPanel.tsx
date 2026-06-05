@@ -2047,6 +2047,7 @@ const contratoPDF = (reg: any) => {
     <tr><td class="l">Teléfono / Correo</td><td>${reg.phone || ''} ${reg.email ? '· ' + reg.email : ''}</td></tr>
     <tr><td class="l">Acompañantes</td><td>${reg.acompanantes ?? ''}</td></tr>
     <tr><td class="l">Procedencia / Motivo</td><td>${reg.procedencia || ''} ${reg.motivo ? '· ' + reg.motivo : ''}</td></tr>
+    ${Array.isArray(reg.companions) && reg.companions.length ? `<tr><td class="l">Acompañantes</td><td>${reg.companions.map((c: any) => `${c.nombre} (${c.doc_type || ''} ${c.doc_number || ''})`).join('<br>')}</td></tr>` : ''}
   </table>
   <div style="margin-top:8px">${clausulas}</div>
   <div class="firma">
@@ -2119,6 +2120,11 @@ const Checkins: React.FC = () => {
               <p><b className="text-gray-400">Teléfono:</b> {detail.phone}{detail.email ? ` · ${detail.email}` : ''}</p>
               <p><b className="text-gray-400">Acompañantes:</b> {detail.acompanantes ?? '—'} · <b className="text-gray-400">Llegada:</b> {detail.hora_llegada || '—'}</p>
               <p><b className="text-gray-400">Procedencia:</b> {detail.procedencia || '—'} · <b className="text-gray-400">Motivo:</b> {detail.motivo || '—'}</p>
+              {Array.isArray(detail.companions) && detail.companions.length > 0 && (
+                <div><b className="text-gray-400">Acompañantes:</b>
+                  <ul className="list-disc ml-5 mt-1">{detail.companions.map((c: any, i: number) => <li key={i}>{c.nombre} — {c.doc_type} {c.doc_number}</li>)}</ul>
+                </div>
+              )}
               {detail.signed_at && <p className="text-xs text-gray-400">Firmado {new Date(detail.signed_at).toLocaleString('es-CO')}{detail.ip ? ` · IP ${detail.ip}` : ''}</p>}
             </div>
             <div className="grid grid-cols-2 gap-2 mt-3">
