@@ -1629,6 +1629,11 @@ const Contabilidad: React.FC = () => {
   const today = new Date();
   const [ym, setYm] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
   const [platDetail, setPlatDetail] = useState<{ label: string; color: string; res: Reservation[] } | null>(null);
+  const [gastos, setGastos] = useState<{ nombre: string; monto: number }[]>(() => {
+    try { const s = localStorage.getItem('beto_gastos_fijos'); if (s) return JSON.parse(s); } catch {}
+    return [{ nombre: 'Nómina', monto: 6000000 }, { nombre: 'Servicios públicos', monto: 3000000 }, { nombre: 'Mantenimiento', monto: 1000000 }];
+  });
+  const saveGastos = (g: { nombre: string; monto: number }[]) => { setGastos(g); try { localStorage.setItem('beto_gastos_fijos', JSON.stringify(g)); } catch {} };
 
   const load = async () => {
     setLoading(true);
@@ -1673,6 +1678,8 @@ const Contabilidad: React.FC = () => {
   const totalIngresos = porApto.reduce((s, a) => s + a.ingresos, 0);
   const totalComision = porApto.reduce((s, a) => s + a.comision, 0);
   const totalNeto = totalIngresos - totalComision;
+  const totalGastos = gastos.reduce((s, g) => s + (Number(g.monto) || 0), 0);
+  const gananciaNeta = totalNeto - totalGastos;
   const totalReservas = porApto.reduce((s, a) => s + a.reservas, 0);
   const totalOcupadas = porApto.reduce((s, a) => s + a.ocupadas, 0);
   const ocupacionPct = Math.round((totalOcupadas / (ROOMS.length * daysInMonth)) * 100);
@@ -1716,6 +1723,44 @@ const Contabilidad: React.FC = () => {
             <p className="text-xs text-gray-500 font-bold">{c.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Gastos fijos + ganancia neta */}
+      <div className="grid lg:grid-cols-[1fr_320px] gap-4">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-black text-gray-800"><i className="fa-solid fa-receipt text-red-500 mr-2"></i>Gastos fijos del mes</h3>
+            <button onClick={() => saveGastos([...gastos, { nombre: 'Nuevo gasto', monto: 0 }])} className="text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 px-2.5 py-1.5 rounded-lg"><i className="fa-solid fa-plus mr-1"></i>Agregar</button>
+          </div>
+          <div className="space-y-2">
+            {gastos.map((g, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input value={g.nombre} onChange={e => { const n = [...gastos]; n[i] = { ...n[i], nombre: e.target.value }; saveGastos(n); }}
+                  className="flex-1 p-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-700" />
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" value={g.monto} onChange={e => { const n = [...gastos]; n[i] = { ...n[i], monto: Number(e.target.value) }; saveGastos(n); }}
+                    className="w-36 p-2 pl-5 border border-gray-200 rounded-lg text-sm text-right" />
+                </div>
+                <button onClick={() => saveGastos(gastos.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 px-1"><i className="fa-solid fa-trash text-xs"></i></button>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 font-black text-gray-800">
+            <span>Total gastos fijos</span><span className="text-red-500">-{money(totalGastos)}</span>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">Edita los montos; se guardan automáticamente. Son fijos cada mes.</p>
+        </div>
+
+        {/* Ganancia neta */}
+        <div className={`rounded-2xl shadow-sm p-5 flex flex-col justify-center text-white ${gananciaNeta >= 0 ? 'bg-gradient-to-br from-green-600 to-emerald-700' : 'bg-gradient-to-br from-red-500 to-rose-700'}`}>
+          <p className="text-sm font-bold opacity-90"><i className="fa-solid fa-wallet mr-1.5"></i>Ganancia neta del mes</p>
+          <p className="text-4xl font-black my-2">{money(gananciaNeta)}</p>
+          <div className="text-xs opacity-90 space-y-0.5 border-t border-white/20 pt-2">
+            <p className="flex justify-between"><span>Ingreso (neto comisiones)</span><span>{money(totalNeto)}</span></p>
+            <p className="flex justify-between"><span>Gastos fijos</span><span>-{money(totalGastos)}</span></p>
+          </div>
+        </div>
       </div>
 
       {/* Por plataforma */}
