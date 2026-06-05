@@ -2122,7 +2122,12 @@ const Checkins: React.FC = () => {
               <p><b className="text-gray-400">Procedencia:</b> {detail.procedencia || '—'} · <b className="text-gray-400">Motivo:</b> {detail.motivo || '—'}</p>
               {Array.isArray(detail.companions) && detail.companions.length > 0 && (
                 <div><b className="text-gray-400">Acompañantes:</b>
-                  <ul className="list-disc ml-5 mt-1">{detail.companions.map((c: any, i: number) => <li key={i}>{c.nombre} — {c.doc_type} {c.doc_number}</li>)}</ul>
+                  <ul className="ml-1 mt-1 space-y-1">{detail.companions.map((c: any, i: number) => (
+                    <li key={i} className="flex items-center gap-2">
+                      {c.doc_front ? <a href={c.doc_front} target="_blank" rel="noopener noreferrer"><img src={c.doc_front} className="w-9 h-9 object-cover rounded border border-gray-100" /></a> : <span className="w-9 h-9 rounded bg-gray-100 flex items-center justify-center text-gray-300"><i className="fa-solid fa-image"></i></span>}
+                      <span>{c.nombre} — {c.doc_type} {c.doc_number}</span>
+                    </li>
+                  ))}</ul>
                 </div>
               )}
               {detail.signed_at && <p className="text-xs text-gray-400">Firmado {new Date(detail.signed_at).toLocaleString('es-CO')}{detail.ip ? ` · IP ${detail.ip}` : ''}</p>}

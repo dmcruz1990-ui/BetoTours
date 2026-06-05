@@ -118,6 +118,7 @@
           <div><select id="ac_dt_${i}"><option value="CC">CC</option><option value="CE">CE</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option><option value="RC">RC (menor)</option></select></div>
           <div><input id="ac_dn_${i}" placeholder="N° documento *"></div>
         </div>
+        <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" capture="environment" id="ac_foto_${i}" style="display:none" onchange="prev(this,'ac_prev_${i}','ac_lbl_${i}')"></label>
       </div>`;
     }
     c.innerHTML = html;
@@ -156,12 +157,15 @@
       const nom=(document.getElementById('ac_nom_'+i)?.value||'').trim();
       const dn=(document.getElementById('ac_dn_'+i)?.value||'').trim();
       if(!nom||!dn){ msg.style.color='#dc2626'; msg.textContent=`Completa el nombre y documento del acompañante ${i+1}.`; return; }
-      companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn });
+      const f=document.getElementById('ac_foto_'+i)?.files[0];
+      if(!f){ msg.style.color='#dc2626'; msg.textContent=`Sube la foto del documento del acompañante ${i+1}.`; return; }
+      companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn, _file:f });
     }
     const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='#15803d'; msg.textContent='Subiendo documentos…';
     try{
       const front=await subir(document.getElementById('docFront').files[0],'front');
       const back=document.getElementById('docBack').files[0]?await subir(document.getElementById('docBack').files[0],'back'):null;
+      for(const c of companions){ c.doc_front = await subir(c._file,'acomp'); delete c._file; }
       let ip=''; try{ ip=(await (await fetch('https://api.ipify.org?format=json')).json()).ip; }catch(e){}
       const res=await fetch(`${SB_URL}/rest/v1/guest_registrations`,{
         method:'POST', headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json',Prefer:'return=minimal'},
