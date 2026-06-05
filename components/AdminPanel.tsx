@@ -498,14 +498,33 @@ const CONFIRM_PHONE = '573332482626';
 
 // Mensaje de confirmación para enviar al huésped por WhatsApp
 const confirmacionWA = (r: Reservation) => {
-  const noches = r.nights ? `🌙 ${r.nights} noche${r.nights === 1 ? '' : 's'}\n` : '';
-  const valor = (r.total || 0) > 0 ? `💵 Total: ${money(r.total)}\n` : '';
-  return `¡Hola ${r.guest_name.split(' ')[0]}! 👋 Te confirmamos tu reserva en *Aparta Suites Torre de Prado* (Medellín) 🏨\n\n` +
+  const nombre = r.guest_name.split(' ')[0];
+  return `¡Hola ${nombre}! 😊\n\n` +
+    `Gracias por elegir *Aparta Suites Torre de Prado* by Beto Tours.\n\n` +
     `🏠 ${r.room_name || r.room_id}\n` +
-    `📅 Entrada: ${fullDate(r.check_in)}\n` +
-    `📅 Salida: ${fullDate(r.check_out)}\n` +
-    noches + valor +
-    `\n📲 Por favor confírmanos al *+57 333 248 2626*.\n¡Te esperamos, parce! 🙌`;
+    `📅 Entrada: ${fullDate(r.check_in)} (desde las 3:00 p.m.)\n` +
+    `📅 Salida: ${fullDate(r.check_out)} (hasta las 11:00 a.m.)\n\n` +
+    `📍 *Ubicación*\n` +
+    `Para llegar fácilmente, usa este enlace:\n` +
+    `https://maps.app.goo.gl/6hp1SAxcHP8W4CaV6?g_st=ic\n\n` +
+    `⏰ *Horarios*\n` +
+    `• Check-in: desde las 3:00 p.m.\n` +
+    `• Check-out: hasta las 11:00 a.m.\n\n` +
+    `🚗 *Parqueadero*\n` +
+    `Contamos con parqueadero sujeto a disponibilidad al momento de tu llegada. Valor: $17.000 COP por noche.\n` +
+    `Si no hay disponibilidad, existe un parqueadero privado a ~3 cuadras del alojamiento, donde también podrás estacionar tu vehículo de forma segura.\n\n` +
+    `🎒 *Tours y experiencias en Medellín*\n` +
+    `Durante tu estadía también puedes reservar nuestros tours y actividades en:\n` +
+    `www.betotours.com\n\n` +
+    `Encontrarás opciones como:\n` +
+    `• Guatapé y Piedra del Peñol\n` +
+    `• Tour Comuna 13\n` +
+    `• City Tour Medellín\n` +
+    `• Hacienda Nápoles\n` +
+    `• Santa Fe de Antioquia\n` +
+    `• Y muchas más experiencias\n\n` +
+    `📲 Si tienes alguna pregunta o necesitas ayuda antes de tu llegada, estaremos encantados de atenderte.\n\n` +
+    `¡Te esperamos y te deseamos una excelente estadía! ✨\n\nBeto Tours`;
 };
 const waLink = (phone: string | null, text: string) => {
   const p = (phone || '').replace(/\D/g, '');
