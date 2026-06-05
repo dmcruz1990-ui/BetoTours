@@ -1623,6 +1623,7 @@ const Contabilidad: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const today = new Date();
   const [ym, setYm] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
+  const [platDetail, setPlatDetail] = useState<{ label: string; color: string; res: Reservation[] } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -1676,7 +1677,7 @@ const Contabilidad: React.FC = () => {
     { key: 'directa', label: 'Directas', color: 'text-emerald-600' },
   ].map(p => {
     const res = delMes.filter(r => (channelOf(r) || (r.source === 'web' || r.source === 'manual' ? 'directa' : '')) === p.key);
-    return { ...p, count: res.length, ingresos: res.reduce((s, r) => s + (r.total || 0), 0) };
+    return { ...p, count: res.length, ingresos: res.reduce((s, r) => s + (r.total || 0), 0), res };
   });
 
   const mesNombre = new Date(monthStart + 'T00:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
@@ -1712,11 +1713,12 @@ const Contabilidad: React.FC = () => {
         <h3 className="font-black text-gray-800 mb-3">Ingresos por plataforma</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {plataformas.map(p => (
-            <div key={p.key} className="border border-gray-100 rounded-xl p-3">
+            <button key={p.key} onClick={() => p.count && setPlatDetail({ label: p.label, color: p.color, res: p.res })}
+              className={`text-left border border-gray-100 rounded-xl p-3 transition ${p.count ? 'hover:border-green-300 hover:shadow-sm cursor-pointer' : 'opacity-60 cursor-default'}`}>
               <p className={`font-black ${p.color}`}>{p.label}</p>
               <p className="text-lg font-black text-gray-900">{money(p.ingresos)}</p>
-              <p className="text-xs text-gray-400 font-bold">{p.count} reserva{p.count === 1 ? '' : 's'}</p>
-            </div>
+              <p className="text-xs text-gray-400 font-bold">{p.count} reserva{p.count === 1 ? '' : 's'}{p.count ? ' · ver' : ''}</p>
+            </button>
           ))}
         </div>
       </div>
@@ -1761,6 +1763,32 @@ const Contabilidad: React.FC = () => {
       </div>
 
       <p className="text-xs text-gray-400 text-center">Los ingresos se cuentan por la fecha de entrada (check-in) del mes seleccionado. Las reservas sin valor no suman.</p>
+
+      {/* Detalle de reservas por plataforma */}
+      {platDetail && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setPlatDetail(null); }}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white">
+              <div>
+                <h2 className={`text-xl font-black ${platDetail.color}`}>{platDetail.label}</h2>
+                <p className="text-xs text-gray-500 capitalize">{mesNombre} · {platDetail.res.length} reserva{platDetail.res.length === 1 ? '' : 's'} · {money(platDetail.res.reduce((s, r) => s + (r.total || 0), 0))}</p>
+              </div>
+              <button onClick={() => setPlatDetail(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="p-3">
+              {platDetail.res.slice().sort((a, b) => a.check_in.localeCompare(b.check_in)).map(r => (
+                <div key={r.id} className="flex items-center justify-between gap-3 p-3 border-b border-gray-50 last:border-0">
+                  <div className="min-w-0">
+                    <p className="font-bold text-gray-800 truncate">{r.guest_name}</p>
+                    <p className="text-xs text-gray-500"><i className="fa-solid fa-door-open mr-1"></i>{r.room_name || r.room_id} <span className="mx-1 text-gray-300">·</span>{fmtDate(r.check_in)} → {fmtDate(r.check_out)}</p>
+                  </div>
+                  <span className="font-bold text-green-700 text-sm flex-shrink-0">{money(r.total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
