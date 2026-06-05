@@ -1618,6 +1618,11 @@ const RoomsCalendar: React.FC = () => {
 };
 
 // ============ CONTABILIDAD ============
+// Comisión por canal (lo que cobra cada plataforma)
+const COMMISSION: Record<string, number> = { booking: 0.155, airbnb: 0.155, expedia: 0.262, directa: 0 };
+const canalDe = (r: Reservation): string => channelOf(r) || (r.source === 'web' || r.source === 'manual' ? 'directa' : 'directa');
+const comisionDe = (r: Reservation): number => Math.round((r.total || 0) * (COMMISSION[canalDe(r)] || 0));
+
 const Contabilidad: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1655,16 +1660,19 @@ const Contabilidad: React.FC = () => {
   const porApto = ROOMS.map(room => {
     const res = delMes.filter(r => r.room_id === room.id);
     const ingresos = res.reduce((s, r) => s + (r.total || 0), 0);
+    const comision = res.reduce((s, r) => s + comisionDe(r), 0);
     const nochesVendidas = res.reduce((s, r) => s + (r.nights || nightsBetween(r.check_in, r.check_out).length), 0);
     const ocupadas = nochesOcupadasMes(room.id);
     return {
-      room, reservas: res.length, ingresos, nochesVendidas,
+      room, reservas: res.length, ingresos, comision, neto: ingresos - comision, nochesVendidas,
       tarifa: nochesVendidas ? Math.round(ingresos / nochesVendidas) : 0,
       diasVacios: daysInMonth - ocupadas, ocupadas,
     };
   });
 
   const totalIngresos = porApto.reduce((s, a) => s + a.ingresos, 0);
+  const totalComision = porApto.reduce((s, a) => s + a.comision, 0);
+  const totalNeto = totalIngresos - totalComision;
   const totalReservas = porApto.reduce((s, a) => s + a.reservas, 0);
   const totalOcupadas = porApto.reduce((s, a) => s + a.ocupadas, 0);
   const ocupacionPct = Math.round((totalOcupadas / (ROOMS.length * daysInMonth)) * 100);
@@ -1676,8 +1684,10 @@ const Contabilidad: React.FC = () => {
     { key: 'expedia', label: 'Expedia', color: 'text-orange-600' },
     { key: 'directa', label: 'Directas', color: 'text-emerald-600' },
   ].map(p => {
-    const res = delMes.filter(r => (channelOf(r) || (r.source === 'web' || r.source === 'manual' ? 'directa' : '')) === p.key);
-    return { ...p, count: res.length, ingresos: res.reduce((s, r) => s + (r.total || 0), 0), res };
+    const res = delMes.filter(r => canalDe(r) === p.key);
+    const ingresos = res.reduce((s, r) => s + (r.total || 0), 0);
+    const comision = res.reduce((s, r) => s + comisionDe(r), 0);
+    return { ...p, count: res.length, ingresos, comision, neto: ingresos - comision, rate: COMMISSION[p.key] || 0, res };
   });
 
   const mesNombre = new Date(monthStart + 'T00:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
@@ -1695,10 +1705,10 @@ const Contabilidad: React.FC = () => {
       {/* Tarjetas resumen */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { icon: 'fa-sack-dollar', color: 'bg-green-100 text-green-700', label: 'Ingresos del mes', value: money(totalIngresos) },
+          { icon: 'fa-money-bill-wave', color: 'bg-gray-100 text-gray-700', label: 'Valor real (bruto)', value: money(totalIngresos) },
+          { icon: 'fa-scissors', color: 'bg-red-100 text-red-600', label: 'Comisiones del mes', value: money(totalComision) },
+          { icon: 'fa-sack-dollar', color: 'bg-green-100 text-green-700', label: 'Ingreso a Beto (neto)', value: money(totalNeto) },
           { icon: 'fa-percent', color: 'bg-purple-100 text-purple-700', label: 'Ocupación del mes', value: ocupacionPct + '%' },
-          { icon: 'fa-bell-concierge', color: 'bg-amber-100 text-amber-700', label: 'Reservas del mes', value: totalReservas },
-          { icon: 'fa-moon', color: 'bg-blue-100 text-blue-700', label: 'Noches vendidas', value: totalOcupadas },
         ].map(c => (
           <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${c.color}`}><i className={`fa-solid ${c.icon}`}></i></div>
@@ -1715,9 +1725,10 @@ const Contabilidad: React.FC = () => {
           {plataformas.map(p => (
             <button key={p.key} onClick={() => p.count && setPlatDetail({ label: p.label, color: p.color, res: p.res })}
               className={`text-left border border-gray-100 rounded-xl p-3 transition ${p.count ? 'hover:border-green-300 hover:shadow-sm cursor-pointer' : 'opacity-60 cursor-default'}`}>
-              <p className={`font-black ${p.color}`}>{p.label}</p>
-              <p className="text-lg font-black text-gray-900">{money(p.ingresos)}</p>
-              <p className="text-xs text-gray-400 font-bold">{p.count} reserva{p.count === 1 ? '' : 's'}{p.count ? ' · ver' : ''}</p>
+              <p className={`font-black ${p.color}`}>{p.label} <span className="text-[10px] text-gray-400">{p.rate ? `(${(p.rate * 100).toFixed(1)}%)` : '(0%)'}</span></p>
+              <p className="text-lg font-black text-gray-900">{money(p.neto)}</p>
+              <p className="text-[11px] text-gray-400 font-bold">Bruto {money(p.ingresos)}{p.comision ? ` · comisión ${money(p.comision)}` : ''}</p>
+              <p className="text-[11px] text-gray-400 font-bold">{p.count} reserva{p.count === 1 ? '' : 's'}{p.count ? ' · ver' : ''}</p>
             </button>
           ))}
         </div>
@@ -1732,8 +1743,9 @@ const Contabilidad: React.FC = () => {
               <th className="px-5 py-2">Apartamento</th>
               <th className="px-3 py-2 text-center">Reservas</th>
               <th className="px-3 py-2 text-center">Noches</th>
-              <th className="px-3 py-2 text-right">Ingresos</th>
-              <th className="px-3 py-2 text-right">Tarifa prom.</th>
+              <th className="px-3 py-2 text-right">Valor real</th>
+              <th className="px-3 py-2 text-right">Comisión</th>
+              <th className="px-3 py-2 text-right">Neto (Beto)</th>
               <th className="px-3 py-2 text-center">Días vacíos</th>
             </tr>
           </thead>
@@ -1743,8 +1755,9 @@ const Contabilidad: React.FC = () => {
                 <td className="px-5 py-2.5 font-bold text-gray-700">{a.room.name}</td>
                 <td className="px-3 py-2.5 text-center">{a.reservas}</td>
                 <td className="px-3 py-2.5 text-center">{a.ocupadas}</td>
-                <td className="px-3 py-2.5 text-right font-bold text-green-700">{money(a.ingresos)}</td>
-                <td className="px-3 py-2.5 text-right">{a.tarifa ? money(a.tarifa) : '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{money(a.ingresos)}</td>
+                <td className="px-3 py-2.5 text-right text-red-500">{a.comision ? '-' + money(a.comision) : '—'}</td>
+                <td className="px-3 py-2.5 text-right font-bold text-green-700">{money(a.neto)}</td>
                 <td className="px-3 py-2.5 text-center">{a.diasVacios}</td>
               </tr>
             ))}
@@ -1754,15 +1767,16 @@ const Contabilidad: React.FC = () => {
               <td className="px-5 py-3">TOTAL</td>
               <td className="px-3 py-3 text-center">{totalReservas}</td>
               <td className="px-3 py-3 text-center">{totalOcupadas}</td>
-              <td className="px-3 py-3 text-right text-green-700">{money(totalIngresos)}</td>
-              <td className="px-3 py-3"></td>
+              <td className="px-3 py-3 text-right text-gray-700">{money(totalIngresos)}</td>
+              <td className="px-3 py-3 text-right text-red-500">-{money(totalComision)}</td>
+              <td className="px-3 py-3 text-right text-green-700">{money(totalNeto)}</td>
               <td className="px-3 py-3 text-center">{ROOMS.length * daysInMonth - totalOcupadas}</td>
             </tr>
           </tfoot>
         </table>
       </div>
 
-      <p className="text-xs text-gray-400 text-center">Los ingresos se cuentan por la fecha de entrada (check-in) del mes seleccionado. Las reservas sin valor no suman.</p>
+      <p className="text-xs text-gray-400 text-center">Comisiones: Booking 15,5% · Airbnb 15,5% · Expedia 26,2% · Directas 0%. El <b>neto</b> es lo que le queda a Beto después de la comisión. Ingresos por fecha de entrada del mes.</p>
 
       {/* Detalle de reservas por plataforma */}
       {platDetail && (
