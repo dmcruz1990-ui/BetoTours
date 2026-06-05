@@ -499,14 +499,19 @@ const CONFIRM_PHONE = '573332482626';
 // Mensaje de confirmación para enviar al huésped por WhatsApp
 const confirmacionWA = (r: Reservation) => {
   const nombre = r.guest_name.split(' ')[0];
+  // El 304 y la casita están en otra dirección (Villa Hermosa, La Mansión)
+  const esMansion = r.room_id === '304' || r.room_id === 'casita';
+  const direccion = esMansion ? 'Carrera 45D # 63-33, Barrio Villa Hermosa (La Mansión), Medellín' : 'Carrera 47 # 64-41, Medellín';
+  const mapsLink = esMansion ? 'https://maps.app.goo.gl/1zjs7MWBSzQytnP16?g_st=ic' : 'https://maps.app.goo.gl/6hp1SAxcHP8W4CaV6?g_st=ic';
   return `¡Hola ${nombre}! 😊\n\n` +
     `Gracias por elegir *Aparta Suites Torre de Prado* by Beto Tours.\n\n` +
     `🏠 ${r.room_name || r.room_id}\n` +
     `📅 Entrada: ${fullDate(r.check_in)} (desde las 3:00 p.m.)\n` +
     `📅 Salida: ${fullDate(r.check_out)} (hasta las 11:00 a.m.)\n\n` +
     `📍 *Ubicación*\n` +
+    `${direccion}\n` +
     `Para llegar fácilmente, usa este enlace:\n` +
-    `https://maps.app.goo.gl/6hp1SAxcHP8W4CaV6?g_st=ic\n\n` +
+    `${mapsLink}\n\n` +
     `⏰ *Horarios*\n` +
     `• Check-in: desde las 3:00 p.m.\n` +
     `• Check-out: hasta las 11:00 a.m.\n\n` +
