@@ -50,8 +50,9 @@
     <label>Correo electrónico</label><input id="email" type="email" placeholder="correo@ejemplo.com">
     <div class="row">
       <div><label>Ciudad de procedencia</label><input id="procedencia" placeholder="¿De dónde vienes?"></div>
-      <div><label>N° de acompañantes</label><input id="acompanantes" type="number" min="0" value="0"></div>
+      <div><label>N° de acompañantes</label><input id="acompanantes" type="number" min="0" max="15" value="0" oninput="renderAcomp()"></div>
     </div>
+    <div id="acompContainer"></div>
     <div class="row">
       <div><label>Hora aprox. de llegada</label><input id="horaLlegada" type="time"></div>
       <div><label>Motivo del viaje</label><select id="motivo"><option value="">—</option><option>Turismo / Ocio</option><option>Negocios</option><option>Salud</option><option>Otro</option></select></div>
@@ -104,6 +105,24 @@
 
   function prev(input,imgId,lblId){ const f=input.files[0]; if(!f)return; const img=document.getElementById(imgId); img.src=URL.createObjectURL(f); img.style.display='block'; document.getElementById(lblId).textContent='✓ Foto lista'; }
 
+  // Datos de acompañantes (se generan según la cantidad)
+  function renderAcomp(){
+    const n = Math.max(0, Math.min(15, Number(document.getElementById('acompanantes').value)||0));
+    const c = document.getElementById('acompContainer');
+    let html = n>0 ? '<div class="sec" style="margin-top:14px">👥 Datos de los acompañantes</div>' : '';
+    for(let i=0;i<n;i++){
+      html += `<div style="border:1px solid #eef2f7;border-radius:11px;padding:10px;margin-top:8px">
+        <p style="font-size:12px;font-weight:800;color:#475569;margin:0 0 6px">Acompañante ${i+1}</p>
+        <input id="ac_nom_${i}" placeholder="Nombre completo *" style="margin-bottom:6px">
+        <div class="row">
+          <div><select id="ac_dt_${i}"><option value="CC">CC</option><option value="CE">CE</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option><option value="RC">RC (menor)</option></select></div>
+          <div><input id="ac_dn_${i}" placeholder="N° documento *"></div>
+        </div>
+      </div>`;
+    }
+    c.innerHTML = html;
+  }
+
   // Firma (canvas)
   const canvas=document.getElementById('firma'); const ctx=canvas.getContext('2d'); let drawing=false, firmado=false;
   function fit(){ const r=canvas.getBoundingClientRect(); canvas.width=r.width; canvas.height=r.height; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.strokeStyle='#0f172a'; }
@@ -130,6 +149,15 @@
     if(!document.getElementById('docFront').files[0]){ msg.style.color='#dc2626'; msg.textContent='Sube la foto del frente del documento.'; return; }
     if(!firmado){ msg.style.color='#dc2626'; msg.textContent='Por favor firma en el recuadro.'; return; }
     if(!document.getElementById('accept').checked){ msg.style.color='#dc2626'; msg.textContent='Debes aceptar la autorización de datos.'; return; }
+    // Recoger acompañantes
+    const nAc = Math.max(0, Math.min(15, Number(g('acompanantes'))||0));
+    const companions = [];
+    for(let i=0;i<nAc;i++){
+      const nom=(document.getElementById('ac_nom_'+i)?.value||'').trim();
+      const dn=(document.getElementById('ac_dn_'+i)?.value||'').trim();
+      if(!nom||!dn){ msg.style.color='#dc2626'; msg.textContent=`Completa el nombre y documento del acompañante ${i+1}.`; return; }
+      companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn });
+    }
     const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='#15803d'; msg.textContent='Subiendo documentos…';
     try{
       const front=await subir(document.getElementById('docFront').files[0],'front');
@@ -140,7 +168,7 @@
         body:JSON.stringify({
           reservation_id:rid||null, nombre:g('nombre'), doc_type:document.getElementById('docType').value, doc_number:g('docNumber'),
           nationality:g('nationality'), phone:g('phone'), email:g('email')||null, procedencia:g('procedencia')||null,
-          acompanantes:Number(g('acompanantes'))||0, hora_llegada:g('horaLlegada')||null, motivo:document.getElementById('motivo').value||null,
+          acompanantes:nAc, companions:companions, hora_llegada:g('horaLlegada')||null, motivo:document.getElementById('motivo').value||null,
           doc_front:front, doc_back:back, signature:canvas.toDataURL('image/png'), signed_at:new Date().toISOString(), ip:ip, accepted:true
         })
       });
