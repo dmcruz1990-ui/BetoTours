@@ -313,6 +313,7 @@ interface Room { id: string; name: string; guests: number; bed: string; price: s
 
 const ROOMS: Room[] = [
   { id: '200', name: 'Aparta Suite 200', guests: 2, bed: '—', price: '—' },
+  { id: '201b', name: 'Aparta Suite 201 B', guests: 2, bed: '—', price: '—' },
   { id: '301', name: 'Aparta Suite 301', guests: 4, bed: 'Cama 1.40', price: '150.000' },
   { id: '302', name: 'Aparta Suite 302', guests: 4, bed: 'Cama 1.40', price: '130.000' },
   { id: '303', name: 'Aparta Suite 303', guests: 3, bed: 'Cama 1.40', price: '110.000' },
@@ -499,8 +500,8 @@ const CONFIRM_PHONE = '573332482626';
 // Mensaje de confirmación para enviar al huésped por WhatsApp
 const confirmacionWA = (r: Reservation) => {
   const nombre = r.guest_name.split(' ')[0];
-  // El 304 y la casita están en otra dirección (Villa Hermosa, La Mansión)
-  const esMansion = r.room_id === '304' || r.room_id === 'casita';
+  // El 304, la 201 B y la casita están en otra dirección (Villa Hermosa, La Mansión)
+  const esMansion = r.room_id === '304' || r.room_id === 'casita' || r.room_id === '201b';
   const direccion = esMansion ? 'Carrera 45D # 63-33, Barrio Villa Hermosa (La Mansión), Medellín' : 'Carrera 47 # 64-41, Medellín';
   const mapsLink = esMansion ? 'https://maps.app.goo.gl/1zjs7MWBSzQytnP16?g_st=ic' : 'https://maps.app.goo.gl/6hp1SAxcHP8W4CaV6?g_st=ic';
   return `¡Hola ${nombre}! 😊\n\n` +
