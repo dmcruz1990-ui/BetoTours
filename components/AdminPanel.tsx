@@ -350,6 +350,11 @@ const nightsBetween = (checkIn: string, checkOut: string): string[] => {
   while (d < end) { out.push(ymd(d.getFullYear(), d.getMonth(), d.getDate())); d.setDate(d.getDate() + 1); }
   return out;
 };
+// ¿Se cruzan dos rangos [aIn,aOut) y [bIn,bOut)?
+const rangesOverlap = (aIn: string, aOut: string, bIn: string, bOut: string) => aIn < bOut && bIn < aOut;
+// Apartamentos libres en un rango de fechas
+const freeRoomsInRange = (reservations: Reservation[], ci: string, co: string): Room[] =>
+  ROOMS.filter(room => !reservations.some(r => r.room_id === room.id && rangesOverlap(ci, co, r.check_in, r.check_out)));
 
 const STATUS_META: Record<ReservationStatus, { label: string; chip: string; dot: string; cell: string }> = {
   pending:   { label: 'Pendiente',  chip: 'text-amber-700 bg-amber-50 border-amber-200', dot: 'bg-amber-500', cell: 'bg-amber-400 text-white hover:bg-amber-500' },
@@ -1153,6 +1158,9 @@ const TimelineBoard: React.FC = () => {
   // Arrastre para alargar reservas manuales
   const [drag, setDrag] = useState<{ id: string; roomId: string; overDay: string } | null>(null);
   const draggedRef = useRef(false);
+  // Buscador de disponibilidad por fecha
+  const [findIn, setFindIn] = useState('');
+  const [findOut, setFindOut] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -1256,6 +1264,39 @@ const TimelineBoard: React.FC = () => {
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-emerald-600"></span>Directa</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-amber-400"></span>Pendiente</span>
         <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-gray-400"></span>Bloqueado</span>
+      </div>
+
+      {/* Buscador de disponibilidad por fecha */}
+      <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          <span className="font-black text-green-800"><i className="fa-solid fa-magnifying-glass mr-1"></i>¿Qué hay libre?</span>
+          <label className="text-xs font-bold text-gray-600">Entrada
+            <input type="date" value={findIn} onChange={e => setFindIn(e.target.value)} className="ml-1 p-1.5 border border-gray-200 rounded-lg text-xs font-normal" />
+          </label>
+          <label className="text-xs font-bold text-gray-600">Salida
+            <input type="date" value={findOut} onChange={e => setFindOut(e.target.value)} className="ml-1 p-1.5 border border-gray-200 rounded-lg text-xs font-normal" />
+          </label>
+          {(findIn || findOut) && <button onClick={() => { setFindIn(''); setFindOut(''); }} className="text-xs font-bold text-gray-400 hover:text-gray-600">Limpiar</button>}
+        </div>
+        {findIn && findOut && findOut > findIn && (() => {
+          const libres = freeRoomsInRange(reservations, findIn, findOut);
+          return (
+            <div className="mt-2 text-sm">
+              <p className="font-bold text-gray-700 mb-1">{libres.length} libre(s) del {fmtDate(findIn)} al {fmtDate(findOut)}:</p>
+              {libres.length === 0 ? <p className="text-red-500 text-xs font-bold">No hay apartamentos libres en esas fechas.</p> : (
+                <div className="flex flex-wrap gap-1.5">
+                  {libres.map(r => (
+                    <button key={r.id} onClick={() => setEditing(blankReservation({ room_id: r.id, check_in: findIn, check_out: findOut }))}
+                      title="Crear reserva en este apartamento"
+                      className="text-xs font-bold bg-white border border-green-300 text-green-700 px-2.5 py-1 rounded-lg hover:bg-green-100">
+                      <i className="fa-solid fa-door-open mr-1"></i>{r.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Aviso de estado: cuántas reservas hay y si caen en la ventana visible */}
