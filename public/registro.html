@@ -3,99 +3,134 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Registro de Huésped — Aparta Suites Torre de Prado</title>
+<title>Web Check-in — Aparta Suites Torre de Prado</title>
 <style>
   *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
   body{margin:0;background:#f1f5f9;color:#1e293b;padding:16px}
-  .card{max-width:560px;margin:20px auto;background:#fff;border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.08);overflow:hidden}
-  .head{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:24px;text-align:center}
-  .head h1{margin:0;font-size:20px}
-  .head p{margin:6px 0 0;font-size:13px;opacity:.9}
-  .body{padding:24px}
-  label{display:block;font-size:13px;font-weight:700;color:#475569;margin:14px 0 5px}
-  input,select,textarea{width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:11px;font:inherit;outline:none}
-  input:focus,select:focus,textarea:focus{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.2)}
-  .row{display:flex;gap:12px}.row>div{flex:1}
-  .auth{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-top:18px;font-size:12px;color:#475569;max-height:200px;overflow:auto;line-height:1.5}
-  .auth h3{margin:0 0 8px;font-size:13px;color:#0f172a}
-  .chk{display:flex;align-items:flex-start;gap:10px;margin-top:14px;font-size:13px;font-weight:600}
+  .card{max-width:560px;margin:18px auto;background:#fff;border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.08);overflow:hidden}
+  .head{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:22px;text-align:center}
+  .head h1{margin:0;font-size:20px}.head p{margin:6px 0 0;font-size:13px;opacity:.9}
+  .body{padding:22px}
+  .sec{font-size:13px;font-weight:800;color:#15803d;margin:22px 0 4px;display:flex;align-items:center;gap:8px;border-top:1px solid #f1f5f9;padding-top:16px}
+  .sec:first-of-type{border-top:none;padding-top:0;margin-top:6px}
+  label{display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px}
+  input,select,textarea{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:11px;font:inherit;outline:none}
+  input:focus,select:focus{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.2)}
+  .row{display:flex;gap:10px}.row>div{flex:1}
+  .file{display:flex;align-items:center;gap:10px;border:1px dashed #cbd5e1;border-radius:11px;padding:10px;font-size:13px;color:#64748b;cursor:pointer}
+  .file img{width:46px;height:46px;object-fit:cover;border-radius:8px;display:none}
+  canvas{width:100%;height:170px;border:1px solid #e2e8f0;border-radius:11px;touch-action:none;background:#fff}
+  .auth{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:13px;margin-top:14px;font-size:11.5px;color:#475569;max-height:170px;overflow:auto;line-height:1.5}
+  .chk{display:flex;align-items:flex-start;gap:10px;margin-top:12px;font-size:13px;font-weight:600}
   .chk input{width:20px;height:20px;flex-shrink:0;accent-color:#16a34a;margin-top:1px}
-  .btn{width:100%;margin-top:20px;background:#16a34a;color:#fff;border:none;border-radius:12px;padding:15px;font-weight:800;font-size:16px;cursor:pointer}
+  .btn{width:100%;margin-top:18px;background:#16a34a;color:#fff;border:none;border-radius:12px;padding:15px;font-weight:800;font-size:16px;cursor:pointer}
   .btn:disabled{opacity:.5}
-  .msg{text-align:center;font-weight:700;margin-top:14px;min-height:20px}
-  .ok-screen{text-align:center;padding:40px 24px}
+  .lnk{font-size:12px;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:700}
+  .msg{text-align:center;font-weight:700;margin-top:12px;min-height:20px}
+  .ok-screen{text-align:center;padding:40px 22px}
   .ok-screen .check{width:70px;height:70px;background:#dcfce7;color:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 16px}
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="head">
-    <h1>🏨 Registro de Huésped</h1>
-    <p>Aparta Suites Torre de Prado · Beto Tours</p>
-  </div>
+  <div class="head"><h1>🏨 Web Check-in</h1><p>Aparta Suites Torre de Prado · Beto Tours</p></div>
   <div class="body" id="formArea">
-    <p style="font-size:13px;color:#64748b;margin-top:0">Completa tus datos para agilizar tu check-in. Es rápido y obligatorio según la ley colombiana de registro de huéspedes.</p>
-    <label>Nombre completo *</label>
-    <input id="nombre" placeholder="Nombre y apellidos">
+    <p style="font-size:13px;color:#64748b;margin:0">Completa tu registro antes de llegar. Es rápido, seguro y obligatorio según la ley colombiana.</p>
+
+    <div class="sec">1️⃣ Datos del huésped</div>
+    <label>Nombre completo *</label><input id="nombre" placeholder="Nombre y apellidos">
     <div class="row">
-      <div><label>Tipo de documento *</label>
-        <select id="docType"><option value="CC">CC (Cédula)</option><option value="CE">CE (Cédula extranjería)</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option></select>
-      </div>
+      <div><label>Tipo de documento *</label><select id="docType"><option value="CC">CC</option><option value="CE">CE</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option></select></div>
       <div><label>N° de documento *</label><input id="docNumber" placeholder="Documento"></div>
     </div>
     <div class="row">
-      <div><label>Nacionalidad *</label><input id="nationality" placeholder="Ej: Colombiana"></div>
+      <div><label>Nacionalidad *</label><input id="nationality" placeholder="Colombiana"></div>
       <div><label>Teléfono *</label><input id="phone" placeholder="300 123 4567"></div>
     </div>
-    <label>Correo</label>
-    <input id="email" type="email" placeholder="correo@ejemplo.com">
+    <label>Correo electrónico</label><input id="email" type="email" placeholder="correo@ejemplo.com">
     <div class="row">
-      <div><label>Procedencia (ciudad)</label><input id="procedencia" placeholder="¿De dónde vienes?"></div>
-      <div><label>Motivo del viaje</label>
-        <select id="motivo"><option value="">—</option><option>Turismo / Ocio</option><option>Negocios</option><option>Salud</option><option>Otro</option></select>
-      </div>
+      <div><label>Ciudad de procedencia</label><input id="procedencia" placeholder="¿De dónde vienes?"></div>
+      <div><label>N° de acompañantes</label><input id="acompanantes" type="number" min="0" value="0"></div>
     </div>
+    <div class="row">
+      <div><label>Hora aprox. de llegada</label><input id="horaLlegada" type="time"></div>
+      <div><label>Motivo del viaje</label><select id="motivo"><option value="">—</option><option>Turismo / Ocio</option><option>Negocios</option><option>Salud</option><option>Otro</option></select></div>
+    </div>
+
+    <div class="sec">2️⃣ Foto del documento</div>
+    <label>Frente del documento *</label>
+    <label class="file"><span id="frontLbl">📷 Tomar / subir foto (frente)</span><img id="frontPrev"><input type="file" accept="image/*" capture="environment" id="docFront" style="display:none" onchange="prev(this,'frontPrev','frontLbl')"></label>
+    <label>Reverso (si aplica)</label>
+    <label class="file"><span id="backLbl">📷 Tomar / subir foto (reverso)</span><img id="backPrev"><input type="file" accept="image/*" capture="environment" id="docBack" style="display:none" onchange="prev(this,'backPrev','backLbl')"></label>
+
+    <div class="sec">3️⃣ Firma del huésped</div>
+    <p style="font-size:12px;color:#64748b;margin:4px 0">Firma con el dedo dentro del recuadro:</p>
+    <canvas id="firma"></canvas>
+    <div style="text-align:right;margin-top:4px"><button class="lnk" onclick="limpiarFirma()">↺ Borrar firma</button></div>
 
     <div class="auth">
-      <h3>AUTORIZACIÓN DE TRATAMIENTO DE DATOS Y REGISTRO DE HUÉSPEDES</h3>
-      Al completar este formulario de registro, autorizo de manera libre, previa, expresa e informada a <b>Aparta Suites Torre de Prado</b> y <b>Beto Tours</b> para recopilar, almacenar y procesar mis datos personales con el fin de gestionar mi reserva, realizar el registro obligatorio de huéspedes exigido por la normatividad colombiana, prestar los servicios de alojamiento contratados y atender cualquier requerimiento relacionado con mi estadía.<br><br>
-      Declaro que la información suministrada es veraz y autorizo el tratamiento de mis datos de identificación, contacto y documentación personal para fines administrativos, operativos, de seguridad y cumplimiento legal.<br><br>
-      Asimismo, autorizo el almacenamiento de la copia de mi documento de identidad para efectos del registro de huéspedes y las obligaciones legales aplicables a los establecimientos de alojamiento turístico.<br><br>
-      Al enviar este formulario confirmo que he leído y acepto las políticas de privacidad y tratamiento de datos de Aparta Suites Torre de Prado y Beto Tours.
+      <b>AUTORIZACIÓN DE TRATAMIENTO DE DATOS Y REGISTRO DE HUÉSPEDES</b><br><br>
+      Al completar este formulario autorizo de manera libre, previa, expresa e informada a <b>Aparta Suites Torre de Prado</b> y <b>Beto Tours</b> a recopilar, almacenar y procesar mis datos personales para gestionar mi reserva, realizar el registro obligatorio de huéspedes exigido por la normatividad colombiana, prestar los servicios de alojamiento y atender requerimientos de mi estadía. Declaro que la información es veraz y autorizo el tratamiento de mis datos de identificación, contacto y documentación, así como el almacenamiento de la copia de mi documento de identidad, para fines administrativos, operativos, de seguridad y cumplimiento legal. Confirmo que he leído y acepto las políticas de privacidad y tratamiento de datos.
     </div>
-    <label class="chk"><input type="checkbox" id="accept"> He leído y acepto la autorización de tratamiento de datos y el registro de huéspedes. *</label>
+    <label class="chk"><input type="checkbox" id="accept"> Acepto el tratamiento de mis datos personales y autorizo el almacenamiento de la información suministrada para fines de registro hotelero y cumplimiento de la normatividad aplicable. *</label>
 
-    <button class="btn" id="submitBtn" onclick="enviar()">Enviar registro</button>
+    <button class="btn" id="submitBtn" onclick="enviar()">Enviar check-in</button>
     <p class="msg" id="msg"></p>
   </div>
 </div>
 
 <script>
-  const SB_URL = "https://evodmxqehoyjfkiulrwf.supabase.co";
-  const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2b2RteHFlaG95amZraXVscndmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjg3ODksImV4cCI6MjA5NTkwNDc4OX0.OOPmj5K_MP4kjjQshsbNZoBf1WNykLtBHugxl56WYrc";
-  const params = new URLSearchParams(location.search);
-  const rid = params.get('rid');
-  if (params.get('n')) document.getElementById('nombre').value = params.get('n');
+  const SB_URL="https://evodmxqehoyjfkiulrwf.supabase.co";
+  const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2b2RteHFlaG95amZraXVscndmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjg3ODksImV4cCI6MjA5NTkwNDc4OX0.OOPmj5K_MP4kjjQshsbNZoBf1WNykLtBHugxl56WYrc";
+  const params=new URLSearchParams(location.search);
+  const rid=params.get('rid');
+  if(params.get('n')) document.getElementById('nombre').value=params.get('n');
+
+  function prev(input,imgId,lblId){ const f=input.files[0]; if(!f)return; const img=document.getElementById(imgId); img.src=URL.createObjectURL(f); img.style.display='block'; document.getElementById(lblId).textContent='✓ Foto lista'; }
+
+  // Firma (canvas)
+  const canvas=document.getElementById('firma'); const ctx=canvas.getContext('2d'); let drawing=false, firmado=false;
+  function fit(){ const r=canvas.getBoundingClientRect(); canvas.width=r.width; canvas.height=r.height; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.strokeStyle='#0f172a'; }
+  setTimeout(fit,50); window.addEventListener('resize',fit);
+  function p(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+  canvas.addEventListener('pointerdown',e=>{drawing=true;firmado=true;const q=p(e);ctx.beginPath();ctx.moveTo(q.x,q.y);});
+  canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const q=p(e);ctx.lineTo(q.x,q.y);ctx.stroke();});
+  window.addEventListener('pointerup',()=>drawing=false);
+  function limpiarFirma(){ ctx.clearRect(0,0,canvas.width,canvas.height); firmado=false; }
+
+  async function subir(file,prefix){
+    if(!file) return null;
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const path=`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const r=await fetch(`${SB_URL}/storage/v1/object/documentos/${path}`,{method:'POST',headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':file.type||'image/jpeg'},body:file});
+    if(!r.ok) throw new Error('No se pudo subir la foto');
+    return `${SB_URL}/storage/v1/object/public/documentos/${path}`;
+  }
 
   async function enviar(){
-    const g = id => document.getElementById(id).value.trim();
-    const msg = document.getElementById('msg');
+    const g=id=>document.getElementById(id).value.trim();
+    const msg=document.getElementById('msg');
     if(!g('nombre')||!g('docNumber')||!g('nationality')||!g('phone')){ msg.style.color='#dc2626'; msg.textContent='Completa los campos obligatorios (*).'; return; }
+    if(!document.getElementById('docFront').files[0]){ msg.style.color='#dc2626'; msg.textContent='Sube la foto del frente del documento.'; return; }
+    if(!firmado){ msg.style.color='#dc2626'; msg.textContent='Por favor firma en el recuadro.'; return; }
     if(!document.getElementById('accept').checked){ msg.style.color='#dc2626'; msg.textContent='Debes aceptar la autorización de datos.'; return; }
-    const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…';
+    const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='#15803d'; msg.textContent='Subiendo documentos…';
     try{
-      const res = await fetch(`${SB_URL}/rest/v1/guest_registrations`,{
-        method:'POST',
-        headers:{ apikey:SB_KEY, Authorization:`Bearer ${SB_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
-        body: JSON.stringify({
-          reservation_id: rid || null, nombre:g('nombre'), doc_type:document.getElementById('docType').value,
-          doc_number:g('docNumber'), nationality:g('nationality'), phone:g('phone'), email:g('email')||null,
-          procedencia:g('procedencia')||null, motivo:document.getElementById('motivo').value||null, accepted:true
+      const front=await subir(document.getElementById('docFront').files[0],'front');
+      const back=document.getElementById('docBack').files[0]?await subir(document.getElementById('docBack').files[0],'back'):null;
+      let ip=''; try{ ip=(await (await fetch('https://api.ipify.org?format=json')).json()).ip; }catch(e){}
+      const res=await fetch(`${SB_URL}/rest/v1/guest_registrations`,{
+        method:'POST', headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json',Prefer:'return=minimal'},
+        body:JSON.stringify({
+          reservation_id:rid||null, nombre:g('nombre'), doc_type:document.getElementById('docType').value, doc_number:g('docNumber'),
+          nationality:g('nationality'), phone:g('phone'), email:g('email')||null, procedencia:g('procedencia')||null,
+          acompanantes:Number(g('acompanantes'))||0, hora_llegada:g('horaLlegada')||null, motivo:document.getElementById('motivo').value||null,
+          doc_front:front, doc_back:back, signature:canvas.toDataURL('image/png'), signed_at:new Date().toISOString(), ip:ip, accepted:true
         })
       });
       if(!res.ok) throw new Error(await res.text());
-      document.getElementById('formArea').innerHTML = '<div class="ok-screen"><div class="check">✓</div><h2 style="margin:0;color:#15803d">¡Registro recibido!</h2><p style="color:#64748b">Gracias. Tu check-in será más rápido. ¡Te esperamos! 🇨🇴</p></div>';
-    }catch(e){ msg.style.color='#dc2626'; msg.textContent='No se pudo enviar. Intenta de nuevo o escríbenos por WhatsApp.'; btn.disabled=false; btn.textContent='Enviar registro'; }
+      document.getElementById('formArea').innerHTML='<div class="ok-screen"><div class="check">✓</div><h2 style="margin:0;color:#15803d">¡Check-in completado!</h2><p style="color:#64748b">Gracias. Tu llegada será mucho más rápida. ¡Te esperamos! 🇨🇴</p></div>';
+    }catch(e){ msg.style.color='#dc2626'; msg.textContent='No se pudo enviar. Revisa tu conexión e intenta de nuevo.'; btn.disabled=false; btn.textContent='Enviar check-in'; }
   }
 </script>
 </body>
