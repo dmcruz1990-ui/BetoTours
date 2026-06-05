@@ -229,6 +229,16 @@
     </div>
     <div class="filters" id="filters"></div>
   </div>
+  <div class="date-search" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:14px;margin-bottom:20px">
+    <div style="font-weight:800;color:#15803d;display:flex;align-items:center;gap:6px">🔎 ¿Qué hay disponible?</div>
+    <label style="font-size:12px;font-weight:700;color:#475569;display:flex;flex-direction:column;gap:4px">Entrada
+      <input type="date" id="availIn" style="padding:9px;border:1px solid #e2e8f0;border-radius:10px;font:inherit"></label>
+    <label style="font-size:12px;font-weight:700;color:#475569;display:flex;flex-direction:column;gap:4px">Salida
+      <input type="date" id="availOut" style="padding:9px;border:1px solid #e2e8f0;border-radius:10px;font:inherit"></label>
+    <button onclick="buscarDisponibilidad()" style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:800;cursor:pointer">Buscar</button>
+    <button onclick="limpiarFechas()" id="clearDates" style="display:none;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:11px 14px;font-weight:700;color:#64748b;cursor:pointer">Ver todos</button>
+    <span id="availMsg" style="font-size:13px;font-weight:700;color:#15803d"></span>
+  </div>
   <div class="grid" id="grid"></div>
 </section>
 
@@ -368,6 +378,7 @@
     {name:"Aparta Suite 403", cat:"Aparta Suite", guests:3, bed:"Cama Doble", price:"110.000", img:B+"Proyecto-sin-nombre-Capa-1-copia-1-992x992.jpeg", amen:["Cocina","Baño privado","Smart TV","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-403"},
     {name:"Aparta Suite 501", cat:"Aparta Suite", guests:7, bed:"Cama 1.60", price:"170.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-11.43.12_0f6934f3-992x992.jpg", amen:["Cocina","Baño privado","Smart TV","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-501"},
     {name:"Aparta Suite 502", cat:"Aparta Suite", guests:5, bed:"Cama 1.40", price:"150.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-11.48.55_4fa23264-992x992.jpg", amen:["Cocina","Baño privado","Smart TV","Sofá cama"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-502"},
+    {name:"Aparta Suite 503", cat:"Aparta Suite", guests:3, bed:"Cama 1.40", price:"110.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-11.48.55_4fa23264-992x992.jpg", amen:["Cocina","Baño privado","Smart TV","Wifi"], book:""},
     {name:"Aparta Suite 504", cat:"Aparta Suite", guests:6, bed:"Cama 1.40", price:"160.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-12.01.05_5b34f624-992x992.jpg", amen:["Cocina","Baño privado","Smart TV","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-504"},
     {name:"Penthouse 601", cat:"Aparta Suite", penthouse:true, guests:9, bed:"Cama 1.40", price:"170.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-12.05.58_0cef3b65-992x992.jpg", amen:["Cocina","Baño privado","Smart TV","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-601"}
   ];
@@ -397,10 +408,41 @@
 
   function reservarOnline(url){ window.open(url,'_blank'); }
 
+  // Disponibilidad por fechas (estilo Booking). null = sin búsqueda de fechas.
+  let occupiedByDate = null;
+  function overlaps(aIn,aOut,bIn,bOut){ return aIn < bOut && bIn < aOut; }
+
+  async function buscarDisponibilidad(){
+    const ci = document.getElementById('availIn').value, co = document.getElementById('availOut').value;
+    const msg = document.getElementById('availMsg');
+    if(!ci || !co || co <= ci){ msg.textContent='Elige entrada y salida válidas.'; return; }
+    msg.textContent='Buscando…';
+    try{
+      const res = await fetch(`${SB_URL}/rest/v1/room_occupancy?select=room_id,check_in,check_out`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+      });
+      const rows = res.ok ? await res.json() : [];
+      const set = new Set();
+      rows.forEach(r => { if(overlaps(ci, co, r.check_in, r.check_out)) set.add(String(r.room_id)); });
+      occupiedByDate = set;
+      render();
+      const libres = stays.filter(s => !set.has(refOf(s))).length;
+      msg.style.color = libres ? '#15803d' : '#dc2626';
+      msg.textContent = `${libres} disponible(s) del ${ci} al ${co}`;
+      document.getElementById('clearDates').style.display = 'inline-block';
+    }catch(e){ msg.textContent='No se pudo consultar la disponibilidad.'; }
+  }
+  function limpiarFechas(){
+    occupiedByDate = null;
+    document.getElementById('availIn').value=''; document.getElementById('availOut').value='';
+    document.getElementById('availMsg').textContent=''; document.getElementById('clearDates').style.display='none';
+    render();
+  }
+
   function render(){
-    const list = activeFilter==="Todos" ? stays : stays.filter(s=>s.cat===activeFilter);
+    let list = activeFilter==="Todos" ? stays : stays.filter(s=>s.cat===activeFilter);
     document.getElementById('grid').innerHTML = list.map(s=>{
-      const busy = availability[refOf(s)] === false; // solo "ocupado" si el panel lo marcó
+      const busy = occupiedByDate ? occupiedByDate.has(refOf(s)) : (availability[refOf(s)] === false);
       return `
       <div class="card ${busy?'is-busy':''}">
         <div class="card-img">
