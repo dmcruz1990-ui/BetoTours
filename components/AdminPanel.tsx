@@ -13,7 +13,7 @@ const slugify = (s: string) =>
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'blog'>('inicio');
+  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'blog'>('inicio');
 
   // Login real (Supabase Auth)
   const [email, setEmail] = useState('');
@@ -104,12 +104,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('avail')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-toggle-on mr-2"></i>Disponibilidad
         </button>
+        <button onClick={() => setTab('conta')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'conta' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-chart-line mr-2"></i>Contabilidad
+        </button>
         <button onClick={() => setTab('blog')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'blog' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-newspaper mr-2"></i>Blog
         </button>
       </div>
 
-      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : <BlogManager />}
+      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : <BlogManager />}
     </div>
   );
 };
@@ -490,8 +493,66 @@ const confirmacionWA = (r: Reservation) => {
 const waLink = (phone: string | null, text: string) => {
   const p = (phone || '').replace(/\D/g, '');
   if (!p) return '';
-  const full = p.length === 10 ? '57' + p : p; // si es celular colombiano sin indicativo
+  const full = p.length === 10 ? '57' + p : p; // celular colombiano sin indicativo
   return `https://wa.me/${full}?text=${encodeURIComponent(text)}`;
+};
+
+// Datos del hotel para el PDF de confirmación
+const HOTEL = { name: 'Aparta Suites Torre de Prado', address: 'Carrera 47 # 64-41, Medellín, Colombia', phone: '+57 333 248 2626' };
+const SOURCE_LABELS: Record<string, string> = { web: 'Directa (Web)', whatsapp: 'WhatsApp', ayenda: 'Ayenda', externo: 'Externo', manual: 'Directa', booking: 'Booking', airbnb: 'Airbnb', expedia: 'Expedia' };
+
+// Genera una confirmación imprimible (Guardar como PDF) estilo Booking
+const generarPDF = (r: Reservation) => {
+  const w = window.open('', '_blank', 'width=800,height=900');
+  if (!w) { alert('Permite las ventanas emergentes para generar el PDF.'); return; }
+  const canal = channelOf(r) || (r.source === 'web' ? 'directa' : r.source);
+  const noches = r.nights || nightsBetween(r.check_in, r.check_out).length;
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Confirmación ${r.guest_name}</title>
+  <style>
+    *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+    body{margin:0;color:#1e293b;background:#fff}
+    .wrap{max-width:720px;margin:0 auto;padding:32px}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #16a34a;padding-bottom:16px;margin-bottom:24px}
+    .head h1{margin:0;font-size:22px;color:#15803d}
+    .head p{margin:2px 0;font-size:13px;color:#64748b}
+    .badge{display:inline-block;background:#dcfce7;color:#15803d;font-weight:bold;font-size:12px;padding:5px 12px;border-radius:20px}
+    h2{font-size:15px;color:#0f172a;border-left:4px solid #16a34a;padding-left:8px;margin:24px 0 12px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    td{padding:9px 4px;border-bottom:1px solid #f1f5f9}
+    td.l{color:#64748b;font-weight:bold;width:42%}
+    .total{background:#f0fdf4;border-radius:10px;padding:16px;margin-top:16px;display:flex;justify-content:space-between;align-items:center}
+    .total .v{font-size:24px;font-weight:bold;color:#15803d}
+    .foot{margin-top:32px;font-size:12px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:16px}
+    @media print{.no-print{display:none}}
+    .btn{background:#16a34a;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px}
+  </style></head><body><div class="wrap">
+    <div class="no-print" style="text-align:right;margin-bottom:12px"><button class="btn" onclick="window.print()">⬇️ Descargar / Imprimir PDF</button></div>
+    <div class="head">
+      <div><h1>🏨 ${HOTEL.name}</h1><p>${HOTEL.address}</p><p>Tel: ${HOTEL.phone}</p></div>
+      <div style="text-align:right"><div class="badge">RESERVA ${r.status === 'confirmed' ? 'CONFIRMADA' : 'PENDIENTE'}</div><p style="margin-top:8px">N.º ${(r.note || '').replace(/[^0-9]/g, '') || r.id.slice(0, 8)}</p></div>
+    </div>
+    <h2>Datos del huésped</h2>
+    <table>
+      <tr><td class="l">Nombre</td><td>${r.guest_name}</td></tr>
+      ${r.guest_phone ? `<tr><td class="l">Teléfono</td><td>${r.guest_phone}</td></tr>` : ''}
+      ${r.guest_email ? `<tr><td class="l">Correo</td><td>${r.guest_email}</td></tr>` : ''}
+    </table>
+    <h2>Detalles de la estadía</h2>
+    <table>
+      <tr><td class="l">Alojamiento</td><td><b>${r.room_name || r.room_id}</b></td></tr>
+      <tr><td class="l">Dirección</td><td>${HOTEL.address}</td></tr>
+      <tr><td class="l">Entrada (check-in)</td><td>${fullDate(r.check_in)} · 3:00 PM</td></tr>
+      <tr><td class="l">Salida (check-out)</td><td>${fullDate(r.check_out)} · 12:00 PM</td></tr>
+      <tr><td class="l">Noches</td><td>${noches} noche${noches === 1 ? '' : 's'}</td></tr>
+      <tr><td class="l">Huéspedes</td><td>${r.guests || 1}</td></tr>
+      <tr><td class="l">Canal</td><td>${SOURCE_LABELS[canal] || canal || 'Directa'}</td></tr>
+    </table>
+    ${(r.total || 0) > 0 ? `<div class="total"><span style="font-weight:bold;color:#475569">Valor total</span><span class="v">${money(r.total)}</span></div>` : ''}
+    <p style="margin-top:24px;font-size:14px">¡Gracias por reservar con nosotros, <b>${r.guest_name.split(' ')[0]}</b>! Te esperamos en Medellín. 🇨🇴</p>
+    <div class="foot">${HOTEL.name} · ${HOTEL.address} · ${HOTEL.phone}<br>Esta es tu confirmación de reserva. Consérvala para tu check-in.</div>
+  </div></body></html>`;
+  w.document.write(html);
+  w.document.close();
 };
 
 const GuestRow: React.FC<{ r: Reservation; onClick?: () => void }> = ({ r, onClick }) => {
@@ -557,6 +618,7 @@ const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose
 
           <div className="flex flex-wrap gap-2 mt-5">
             {phone && <a href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>Enviar confirmación</a>}
+            <button onClick={() => generarPDF(r)} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700"><i className="fa-solid fa-file-pdf mr-1.5"></i>PDF</button>
             {r.source === 'manual' && r.status !== 'confirmed' && <button disabled={busy} onClick={() => setStatus('confirmed')} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
             {r.status !== 'cancelled' && <button disabled={busy} onClick={() => setStatus('cancelled')} className="px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-sm hover:bg-amber-100 disabled:opacity-50"><i className="fa-solid fa-ban mr-1.5"></i>Cancelar</button>}
             {onEdit && <button onClick={onEdit} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200"><i className="fa-solid fa-pen mr-1.5"></i>Editar</button>}
@@ -1551,6 +1613,154 @@ const RoomsCalendar: React.FC = () => {
       </div>
 
       {detail && <ReservationDetail r={detail} onEdit={() => { setEditing(detail); setDetail(null); }} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load(); }} />}
+    </div>
+  );
+};
+
+// ============ CONTABILIDAD ============
+const Contabilidad: React.FC = () => {
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const today = new Date();
+  const [ym, setYm] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('reservations').select('*').neq('status', 'cancelled');
+    setReservations(((data as Reservation[]) || []).filter(r => !isBlock(r)));
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
+
+  const [yy, mm] = ym.split('-').map(Number);
+  const daysInMonth = new Date(yy, mm, 0).getDate();
+  const monthStart = `${ym}-01`;
+  const monthEnd = `${ym}-${String(daysInMonth).padStart(2, '0')}`;
+  // Reservas cuyo check-in cae en el mes
+  const delMes = reservations.filter(r => r.check_in.startsWith(ym));
+  // Noches ocupadas de una habitación dentro del mes (por solape)
+  const nochesOcupadasMes = (roomId: string) => {
+    let n = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${ym}-${String(d).padStart(2, '0')}`;
+      if (reservations.some(r => r.room_id === roomId && r.check_in <= ds && ds < r.check_out)) n++;
+    }
+    return n;
+  };
+
+  // Por apartamento
+  const porApto = ROOMS.map(room => {
+    const res = delMes.filter(r => r.room_id === room.id);
+    const ingresos = res.reduce((s, r) => s + (r.total || 0), 0);
+    const nochesVendidas = res.reduce((s, r) => s + (r.nights || nightsBetween(r.check_in, r.check_out).length), 0);
+    const ocupadas = nochesOcupadasMes(room.id);
+    return {
+      room, reservas: res.length, ingresos, nochesVendidas,
+      tarifa: nochesVendidas ? Math.round(ingresos / nochesVendidas) : 0,
+      diasVacios: daysInMonth - ocupadas, ocupadas,
+    };
+  });
+
+  const totalIngresos = porApto.reduce((s, a) => s + a.ingresos, 0);
+  const totalReservas = porApto.reduce((s, a) => s + a.reservas, 0);
+  const totalOcupadas = porApto.reduce((s, a) => s + a.ocupadas, 0);
+  const ocupacionPct = Math.round((totalOcupadas / (ROOMS.length * daysInMonth)) * 100);
+
+  // Por plataforma
+  const plataformas = [
+    { key: 'booking', label: 'Booking', color: 'text-blue-600' },
+    { key: 'airbnb', label: 'Airbnb', color: 'text-yellow-600' },
+    { key: 'expedia', label: 'Expedia', color: 'text-orange-600' },
+    { key: 'directa', label: 'Directas', color: 'text-emerald-600' },
+  ].map(p => {
+    const res = delMes.filter(r => (channelOf(r) || (r.source === 'web' || r.source === 'manual' ? 'directa' : '')) === p.key);
+    return { ...p, count: res.length, ingresos: res.reduce((s, r) => s + (r.total || 0), 0) };
+  });
+
+  const mesNombre = new Date(monthStart + 'T00:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-xl font-black text-gray-900"><i className="fa-solid fa-chart-line text-green-600 mr-2"></i>Contabilidad</h2>
+          <p className="text-gray-500 text-sm capitalize">{mesNombre}</p>
+        </div>
+        <input type="month" value={ym} onChange={e => setYm(e.target.value)} className="h-10 px-3 border border-gray-200 rounded-xl text-sm font-bold text-gray-700" />
+      </div>
+
+      {/* Tarjetas resumen */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { icon: 'fa-sack-dollar', color: 'bg-green-100 text-green-700', label: 'Ingresos del mes', value: money(totalIngresos) },
+          { icon: 'fa-percent', color: 'bg-purple-100 text-purple-700', label: 'Ocupación del mes', value: ocupacionPct + '%' },
+          { icon: 'fa-bell-concierge', color: 'bg-amber-100 text-amber-700', label: 'Reservas del mes', value: totalReservas },
+          { icon: 'fa-moon', color: 'bg-blue-100 text-blue-700', label: 'Noches vendidas', value: totalOcupadas },
+        ].map(c => (
+          <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${c.color}`}><i className={`fa-solid ${c.icon}`}></i></div>
+            <p className="text-lg font-black text-gray-900">{c.value}</p>
+            <p className="text-xs text-gray-500 font-bold">{c.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Por plataforma */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h3 className="font-black text-gray-800 mb-3">Ingresos por plataforma</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {plataformas.map(p => (
+            <div key={p.key} className="border border-gray-100 rounded-xl p-3">
+              <p className={`font-black ${p.color}`}>{p.label}</p>
+              <p className="text-lg font-black text-gray-900">{money(p.ingresos)}</p>
+              <p className="text-xs text-gray-400 font-bold">{p.count} reserva{p.count === 1 ? '' : 's'}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tabla por apartamento */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <h3 className="font-black text-gray-800 p-5 pb-3">Reporte por apartamento</h3>
+        <table className="w-full text-sm min-w-max">
+          <thead>
+            <tr className="text-left text-xs text-gray-400 font-black uppercase border-b border-gray-100">
+              <th className="px-5 py-2">Apartamento</th>
+              <th className="px-3 py-2 text-center">Reservas</th>
+              <th className="px-3 py-2 text-center">Noches</th>
+              <th className="px-3 py-2 text-right">Ingresos</th>
+              <th className="px-3 py-2 text-right">Tarifa prom.</th>
+              <th className="px-3 py-2 text-center">Días vacíos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {porApto.map(a => (
+              <tr key={a.room.id} className={`border-b border-gray-50 ${a.ingresos > 0 ? '' : 'text-gray-400'}`}>
+                <td className="px-5 py-2.5 font-bold text-gray-700">{a.room.name}</td>
+                <td className="px-3 py-2.5 text-center">{a.reservas}</td>
+                <td className="px-3 py-2.5 text-center">{a.ocupadas}</td>
+                <td className="px-3 py-2.5 text-right font-bold text-green-700">{money(a.ingresos)}</td>
+                <td className="px-3 py-2.5 text-right">{a.tarifa ? money(a.tarifa) : '—'}</td>
+                <td className="px-3 py-2.5 text-center">{a.diasVacios}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-200 font-black text-gray-900">
+              <td className="px-5 py-3">TOTAL</td>
+              <td className="px-3 py-3 text-center">{totalReservas}</td>
+              <td className="px-3 py-3 text-center">{totalOcupadas}</td>
+              <td className="px-3 py-3 text-right text-green-700">{money(totalIngresos)}</td>
+              <td className="px-3 py-3"></td>
+              <td className="px-3 py-3 text-center">{ROOMS.length * daysInMonth - totalOcupadas}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <p className="text-xs text-gray-400 text-center">Los ingresos se cuentan por la fecha de entrada (check-in) del mes seleccionado. Las reservas sin valor no suman.</p>
     </div>
   );
 };
