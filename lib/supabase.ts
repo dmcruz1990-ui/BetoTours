@@ -55,5 +55,6 @@ export interface Reservation {
   doc_type?: string | null;     // CC, CE, Pasaporte…
   doc_number?: string | null;
   nationality?: string | null;
+  image_url?: string | null;    // captura/imagen de la reserva
   created_at: string;
 }

@@ -389,8 +389,20 @@ const blankReservation = (over: Partial<Reservation> = {}): Partial<Reservation>
 const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => void; onCancel: () => void; }> = ({ initial, onSaved, onCancel }) => {
   const [f, setF] = useState<Partial<Reservation>>(initial);
   const [saving, setSaving] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
   const [err, setErr] = useState('');
   const set = (k: keyof Reservation, v: any) => setF(p => ({ ...p, [k]: v }));
+
+  const subirImagen = async (file: File) => {
+    setUploadingImg(true);
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `reserva-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) { alert('No se pudo subir la imagen: ' + error.message); setUploadingImg(false); return; }
+    const { data } = supabase.storage.from('documentos').getPublicUrl(path);
+    setF(p => ({ ...p, image_url: data.publicUrl }));
+    setUploadingImg(false);
+  };
 
   const save = async () => {
     if (!f.guest_name?.trim()) { setErr('Escribe el nombre del huésped.'); return; }
@@ -404,6 +416,7 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
       status: f.status || 'pending', source: f.source || 'manual',
       total: f.total ?? null, note: f.note || null,
       doc_type: f.doc_type || null, doc_number: f.doc_number || null, nationality: f.nationality || null,
+      image_url: f.image_url || null,
     };
     const { error } = f.id
       ? await supabase.from('reservations').update(payload).eq('id', f.id)
@@ -482,6 +495,16 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
         <label className="text-sm font-bold text-gray-600 sm:col-span-2">Nota (opcional)
           <textarea value={f.note || ''} onChange={e => set('note', e.target.value)} rows={2} className={inp + ' mt-1 font-normal resize-y'} />
         </label>
+        <div className="text-sm font-bold text-gray-600 sm:col-span-2">Imagen de la reserva (opcional)
+          <div className="flex items-center gap-3 mt-1">
+            <label className={`px-4 py-2.5 rounded-xl font-bold text-sm cursor-pointer inline-flex items-center gap-2 ${uploadingImg ? 'bg-gray-200 text-gray-400' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+              <i className={`fa-solid ${uploadingImg ? 'fa-spinner fa-spin' : 'fa-image'}`}></i>{uploadingImg ? 'Subiendo…' : (f.image_url ? 'Cambiar imagen' : 'Subir imagen')}
+              <input type="file" accept="image/*" disabled={uploadingImg} className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) subirImagen(file); e.currentTarget.value = ''; }} />
+            </label>
+            {f.image_url && <a href={f.image_url} target="_blank" rel="noopener noreferrer"><img src={f.image_url} className="h-12 w-12 object-cover rounded-lg border border-gray-200" /></a>}
+            {f.image_url && <button type="button" onClick={() => set('image_url', null)} className="text-red-400 hover:text-red-600 text-sm"><i className="fa-solid fa-trash"></i></button>}
+          </div>
+        </div>
       </div>
       <div className="flex gap-3 pt-5">
         <button onClick={save} disabled={saving} className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-50">
@@ -759,6 +782,13 @@ const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose
             {(r.total || 0) > 0 && <Row icon="fa-sack-dollar" label="Valor" value={money(r.total)} />}
             {r.note && <Row icon="fa-note-sticky" label="Nota" value={r.note} />}
           </div>
+
+          {r.image_url && (
+            <a href={r.image_url} target="_blank" rel="noopener noreferrer" className="block mt-3">
+              <img src={r.image_url} alt="Imagen de la reserva" className="w-full max-h-52 object-cover rounded-xl border border-gray-100" />
+              <p className="text-[11px] text-gray-400 text-center mt-1">Imagen de la reserva (clic para ampliar)</p>
+            </a>
+          )}
 
           <div className="flex flex-wrap gap-2 mt-5">
             {phone && <a href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>Enviar confirmación</a>}
