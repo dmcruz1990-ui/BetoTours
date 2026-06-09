@@ -171,7 +171,7 @@
     prev(input,'ac_prev_'+i,'ac_lbl_'+i);
     const r=await ocrDoc(f,document.getElementById('ac_lbl_'+i));
     const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; };
-    set('ac_nom_'+i,r.nombre); set('ac_dn_'+i,r.doc);
+    set('ac_nom_'+i,r.nombre); set('ac_dn_'+i,r.doc); set('ac_nac_'+i,r.nac);
   }
 
   // Datos de acompañantes (se generan según la cantidad)
@@ -187,6 +187,7 @@
           <div><select id="ac_dt_${i}"><option value="CC">CC</option><option value="CE">CE</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option><option value="RC">RC (menor)</option></select></div>
           <div><input id="ac_dn_${i}" placeholder="N° documento *"></div>
         </div>
+        <input id="ac_nac_${i}" placeholder="Nacionalidad *" style="margin-top:6px">
         <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" capture="environment" id="ac_foto_${i}" style="display:none" onchange="onAcomp(this,${i})"></label>
       </div>`;
     }
@@ -225,10 +226,11 @@
     for(let i=0;i<nAc;i++){
       const nom=(document.getElementById('ac_nom_'+i)?.value||'').trim();
       const dn=(document.getElementById('ac_dn_'+i)?.value||'').trim();
+      const nac=(document.getElementById('ac_nac_'+i)?.value||'').trim();
       if(!nom||!dn){ msg.style.color='#dc2626'; msg.textContent=`Completa el nombre y documento del acompañante ${i+1}.`; return; }
       const f=document.getElementById('ac_foto_'+i)?.files[0];
       if(!f){ msg.style.color='#dc2626'; msg.textContent=`Sube la foto del documento del acompañante ${i+1}.`; return; }
-      companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn, _file:f });
+      companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn, nationality:nac, _file:f });
     }
     const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='#15803d'; msg.textContent='Subiendo documentos…';
     try{
