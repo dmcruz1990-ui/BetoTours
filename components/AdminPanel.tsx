@@ -2137,7 +2137,7 @@ const contratoPDF = (reg: any) => {
     <tr><td class="l">Teléfono / Correo</td><td>${reg.phone || ''} ${reg.email ? '· ' + reg.email : ''}</td></tr>
     <tr><td class="l">Acompañantes</td><td>${reg.acompanantes ?? ''}</td></tr>
     <tr><td class="l">Procedencia / Motivo</td><td>${reg.procedencia || ''} ${reg.motivo ? '· ' + reg.motivo : ''}</td></tr>
-    ${Array.isArray(reg.companions) && reg.companions.length ? `<tr><td class="l">Acompañantes</td><td>${reg.companions.map((c: any) => `${c.nombre} (${c.doc_type || ''} ${c.doc_number || ''})`).join('<br>')}</td></tr>` : ''}
+    ${Array.isArray(reg.companions) && reg.companions.length ? `<tr><td class="l">Acompañantes</td><td>${reg.companions.map((c: any) => `${c.nombre} (${c.doc_type || ''} ${c.doc_number || ''}${c.nationality ? ' · ' + c.nationality : ''})`).join('<br>')}</td></tr>` : ''}
   </table>
   <div style="margin-top:8px">${clausulas}</div>
   <div class="firma">
@@ -2215,7 +2215,7 @@ const Checkins: React.FC = () => {
                   <ul className="ml-1 mt-1 space-y-1">{detail.companions.map((c: any, i: number) => (
                     <li key={i} className="flex items-center gap-2">
                       {c.doc_front ? <a href={c.doc_front} target="_blank" rel="noopener noreferrer"><img src={c.doc_front} className="w-9 h-9 object-cover rounded border border-gray-100" /></a> : <span className="w-9 h-9 rounded bg-gray-100 flex items-center justify-center text-gray-300"><i className="fa-solid fa-image"></i></span>}
-                      <span>{c.nombre} — {c.doc_type} {c.doc_number}</span>
+                      <span>{c.nombre} — {c.doc_type} {c.doc_number}{c.nationality ? ` · ${c.nationality}` : ''}</span>
                     </li>
                   ))}</ul>
                 </div>
