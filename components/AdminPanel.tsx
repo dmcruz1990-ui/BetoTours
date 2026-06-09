@@ -390,18 +390,54 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
   const [f, setF] = useState<Partial<Reservation>>(initial);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [ocr, setOcr] = useState(false);
+  const [ocrMsg, setOcrMsg] = useState('');
   const [err, setErr] = useState('');
   const set = (k: keyof Reservation, v: any) => setF(p => ({ ...p, [k]: v }));
 
   const subirImagen = async (file: File) => {
-    setUploadingImg(true);
+    setUploadingImg(true); setOcrMsg('');
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
     const path = `reserva-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true, contentType: file.type });
-    if (error) { alert('No se pudo subir la imagen: ' + error.message); setUploadingImg(false); return; }
-    const { data } = supabase.storage.from('documentos').getPublicUrl(path);
-    setF(p => ({ ...p, image_url: data.publicUrl }));
+    if (!error) { const { data } = supabase.storage.from('documentos').getPublicUrl(path); setF(p => ({ ...p, image_url: data.publicUrl })); }
     setUploadingImg(false);
+    leerImagen(file);
+  };
+
+  // OCR en el navegador (Tesseract) para autollenar fechas, valor y nombre
+  const leerImagen = async (file: File) => {
+    setOcr(true); setOcrMsg('Leyendo la imagen…');
+    try {
+      const T: any = await new Promise((res, rej) => {
+        if ((window as any).Tesseract) return res((window as any).Tesseract);
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        s.onload = () => res((window as any).Tesseract); s.onerror = rej; document.head.appendChild(s);
+      });
+      const { data } = await T.recognize(file, 'spa');
+      const texto: string = data.text || '';
+      const flat = texto.replace(/\s+/g, ' ');
+      // Fechas (ISO, dd/mm, "dd mmm")
+      const fechas = extraerFechas(texto);
+      // Valor (mayor monto con $ o COP)
+      const montos = (flat.match(/(\$|cop)\s*[\d.,]{4,}/gi) || []).map(m => parseMoney(m)).filter(Boolean) as number[];
+      const total = montos.length ? Math.max(...montos) : null;
+      // Nombre (línea con 2+ palabras Capitalizadas)
+      const nombre = (texto.split('\n').map(l => l.trim()).find(l => /^([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+){1,3}[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+$/.test(l))) || '';
+      setF(p => ({
+        ...p,
+        guest_name: p.guest_name || nombre,
+        check_in: fechas[0] || p.check_in,
+        check_out: fechas[1] || p.check_out,
+        total: p.total ?? total,
+      }));
+      const leidos = [fechas[0] && 'entrada', fechas[1] && 'salida', total && 'valor', nombre && 'nombre'].filter(Boolean);
+      setOcrMsg(leidos.length ? `✅ Leído: ${leidos.join(', ')}. Revisa y completa lo que falte.` : 'No se pudo leer bien la imagen. Llena los datos a mano.');
+    } catch (e) {
+      setOcrMsg('No se pudo leer la imagen. Llena los datos a mano (la foto sí quedó guardada).');
+    }
+    setOcr(false);
   };
 
   const save = async () => {
@@ -429,8 +465,23 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
   const inp = 'w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none';
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-2xl">
-      <h2 className="text-xl font-black mb-6">{f.id ? 'Editar reserva' : 'Nueva reserva'}</h2>
+      <h2 className="text-xl font-black mb-4">{f.id ? 'Editar reserva' : 'Nueva reserva'}</h2>
       {err && <p className="text-red-500 text-sm mb-4 bg-red-50 border border-red-100 rounded-lg p-3">{err}</p>}
+
+      {/* Subir imagen de la reserva → lee los datos solo (OCR) */}
+      <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-5">
+        <p className="text-sm font-black text-green-800 mb-2"><i className="fa-solid fa-wand-magic-sparkles mr-1"></i>Sube la foto de la reserva y carga los datos solo</p>
+        <div className="flex items-center gap-3">
+          <label className={`px-4 py-2.5 rounded-xl font-bold text-sm cursor-pointer inline-flex items-center gap-2 ${(uploadingImg || ocr) ? 'bg-gray-200 text-gray-400' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+            <i className={`fa-solid ${(uploadingImg || ocr) ? 'fa-spinner fa-spin' : 'fa-camera'}`}></i>{ocr ? 'Leyendo…' : uploadingImg ? 'Subiendo…' : (f.image_url ? 'Cambiar foto' : 'Subir foto')}
+            <input type="file" accept="image/*" disabled={uploadingImg || ocr} className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) subirImagen(file); e.currentTarget.value = ''; }} />
+          </label>
+          {f.image_url && <a href={f.image_url} target="_blank" rel="noopener noreferrer"><img src={f.image_url} className="h-12 w-12 object-cover rounded-lg border border-gray-200" /></a>}
+          {f.image_url && <button type="button" onClick={() => set('image_url', null)} className="text-red-400 hover:text-red-600 text-sm"><i className="fa-solid fa-trash"></i></button>}
+        </div>
+        {ocrMsg && <p className="text-xs text-gray-500 mt-2">{ocrMsg}</p>}
+      </div>
+
       <div className="grid sm:grid-cols-2 gap-4">
         <label className="text-sm font-bold text-gray-600">Habitación
           <select value={f.room_id} onChange={e => set('room_id', e.target.value)} className={inp + ' mt-1 font-normal'}>
@@ -495,16 +546,6 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
         <label className="text-sm font-bold text-gray-600 sm:col-span-2">Nota (opcional)
           <textarea value={f.note || ''} onChange={e => set('note', e.target.value)} rows={2} className={inp + ' mt-1 font-normal resize-y'} />
         </label>
-        <div className="text-sm font-bold text-gray-600 sm:col-span-2">Imagen de la reserva (opcional)
-          <div className="flex items-center gap-3 mt-1">
-            <label className={`px-4 py-2.5 rounded-xl font-bold text-sm cursor-pointer inline-flex items-center gap-2 ${uploadingImg ? 'bg-gray-200 text-gray-400' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-              <i className={`fa-solid ${uploadingImg ? 'fa-spinner fa-spin' : 'fa-image'}`}></i>{uploadingImg ? 'Subiendo…' : (f.image_url ? 'Cambiar imagen' : 'Subir imagen')}
-              <input type="file" accept="image/*" disabled={uploadingImg} className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) subirImagen(file); e.currentTarget.value = ''; }} />
-            </label>
-            {f.image_url && <a href={f.image_url} target="_blank" rel="noopener noreferrer"><img src={f.image_url} className="h-12 w-12 object-cover rounded-lg border border-gray-200" /></a>}
-            {f.image_url && <button type="button" onClick={() => set('image_url', null)} className="text-red-400 hover:text-red-600 text-sm"><i className="fa-solid fa-trash"></i></button>}
-          </div>
-        </div>
       </div>
       <div className="flex gap-3 pt-5">
         <button onClick={save} disabled={saving} className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-50">
@@ -933,6 +974,17 @@ const parseDate = (s: string): string | null => {
   const [, d, mo, y] = m;
   const yr = y.length === 2 ? '20' + y : y;
   return `${yr}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+};
+// Extrae fechas (ISO, dd/mm/aaaa, "9 jun 2026") de un texto OCR → AAAA-MM-DD, en orden
+const MESES_ES: Record<string, string> = { ene: '01', feb: '02', mar: '03', abr: '04', may: '05', jun: '06', jul: '07', ago: '08', sep: '09', set: '09', oct: '10', nov: '11', dic: '12' };
+const extraerFechas = (texto: string): string[] => {
+  const t = texto || ''; const out: string[] = [];
+  (t.match(/\d{4}-\d{2}-\d{2}/g) || []).forEach(d => out.push(d));
+  (t.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g) || []).forEach(d => { const p = parseDate(d); if (p) out.push(p); });
+  const re = /(\d{1,2})\s*(?:de\s*)?([A-Za-zÁÉÍÓÚáéíóú]{3,})\.?\s*(?:de\s*)?(\d{4})/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t))) { const mes = MESES_ES[m[2].slice(0, 3).toLowerCase()]; if (mes) out.push(`${m[3]}-${mes}-${m[1].padStart(2, '0')}`); }
+  return [...new Set(out)];
 };
 const parseMoney = (s: string): number | null => {
   let str = (s || '').replace(/[^\d.,]/g, '');
