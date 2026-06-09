@@ -60,7 +60,7 @@
 
     <div class="sec">2️⃣ Foto del documento</div>
     <label>Frente del documento *</label>
-    <label class="file"><span id="frontLbl">📷 Tomar / subir foto (frente)</span><img id="frontPrev"><input type="file" accept="image/*" capture="environment" id="docFront" style="display:none" onchange="prev(this,'frontPrev','frontLbl')"></label>
+    <label class="file"><span id="frontLbl">📷 Tomar / subir foto (frente)</span><img id="frontPrev"><input type="file" accept="image/*" capture="environment" id="docFront" style="display:none" onchange="onDoc(this)"></label>
     <label>Reverso (si aplica)</label>
     <label class="file"><span id="backLbl">📷 Tomar / subir foto (reverso)</span><img id="backPrev"><input type="file" accept="image/*" capture="environment" id="docBack" style="display:none" onchange="prev(this,'backPrev','backLbl')"></label>
 
@@ -105,6 +105,43 @@
 
   function prev(input,imgId,lblId){ const f=input.files[0]; if(!f)return; const img=document.getElementById(imgId); img.src=URL.createObjectURL(f); img.style.display='block'; document.getElementById(lblId).textContent='✓ Foto lista'; }
 
+  // OCR del documento (lee nombre, número y nacionalidad)
+  function loadTess(){ return new Promise((res,rej)=>{ if(window.Tesseract) return res(window.Tesseract); const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; s.onload=()=>res(window.Tesseract); s.onerror=rej; document.head.appendChild(s); }); }
+  function parseDoc(text){
+    const up=(text||'').toUpperCase(); let doc='',nombre='',nac='';
+    const nums=((text||'').replace(/[.\s]/g,'').match(/\d{6,12}/g)||[]).sort((a,b)=>b.length-a.length);
+    if(nums[0]) doc=nums[0];
+    if(/COLOMBIA/.test(up)) nac='Colombiana';
+    const ap=up.match(/APELLIDOS?\s*:?\s*([A-ZÁÉÍÓÚÑ ]{3,40})/);
+    const no=up.match(/NOMBRES?\s*:?\s*([A-ZÁÉÍÓÚÑ ]{3,40})/);
+    if(no&&ap) nombre=(cap(no[1])+' '+cap(ap[1])).replace(/\s+/g,' ').trim();
+    const mrz=up.replace(/\s/g,'').match(/P[<K]([A-Z]{3})([A-Z<]{5,})/);
+    if(!nombre&&mrz){ const pr=mrz[2].split('<<'); const a=(pr[0]||'').replace(/</g,' ').trim(); const n=(pr[1]||'').replace(/</g,' ').trim(); nombre=cap((n+' '+a).trim()); if(!nac&&mrz[1]==='COL') nac='Colombiana'; }
+    return {doc,nombre,nac};
+  }
+  function cap(s){ return s.toLowerCase().replace(/\b[a-záéíóúñ]/g,c=>c.toUpperCase()); }
+
+  async function ocrDoc(file,lbl){
+    lbl.textContent='🔎 Leyendo documento…';
+    try{ const T=await loadTess(); const {data}=await T.recognize(file,'spa'); lbl.textContent='✓ Foto lista'; return parseDoc(data.text||''); }
+    catch(e){ lbl.textContent='✓ Foto lista'; return {doc:'',nombre:'',nac:''}; }
+  }
+
+  async function onDoc(input){
+    const f=input.files[0]; if(!f) return;
+    prev(input,'frontPrev','frontLbl');
+    const r=await ocrDoc(f,document.getElementById('frontLbl'));
+    const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; };
+    set('nombre',r.nombre); set('docNumber',r.doc); set('nationality',r.nac);
+  }
+  async function onAcomp(input,i){
+    const f=input.files[0]; if(!f) return;
+    prev(input,'ac_prev_'+i,'ac_lbl_'+i);
+    const r=await ocrDoc(f,document.getElementById('ac_lbl_'+i));
+    const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; };
+    set('ac_nom_'+i,r.nombre); set('ac_dn_'+i,r.doc);
+  }
+
   // Datos de acompañantes (se generan según la cantidad)
   function renderAcomp(){
     const n = Math.max(0, Math.min(15, Number(document.getElementById('acompanantes').value)||0));
@@ -118,7 +155,7 @@
           <div><select id="ac_dt_${i}"><option value="CC">CC</option><option value="CE">CE</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option><option value="RC">RC (menor)</option></select></div>
           <div><input id="ac_dn_${i}" placeholder="N° documento *"></div>
         </div>
-        <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" capture="environment" id="ac_foto_${i}" style="display:none" onchange="prev(this,'ac_prev_${i}','ac_lbl_${i}')"></label>
+        <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" capture="environment" id="ac_foto_${i}" style="display:none" onchange="onAcomp(this,${i})"></label>
       </div>`;
     }
     c.innerHTML = html;
