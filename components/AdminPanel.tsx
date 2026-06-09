@@ -425,14 +425,22 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
       const total = montos.length ? Math.max(...montos) : null;
       // Nombre (línea con 2+ palabras Capitalizadas)
       const nombre = (texto.split('\n').map(l => l.trim()).find(l => /^([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+){1,3}[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+$/.test(l))) || '';
+      // Celular (con + e indicativo, o 10 dígitos colombiano). Evita fechas/montos.
+      const candTel = (flat.match(/\+?\d[\d\s().\-]{6,}\d/g) || []).map(s => s.trim())
+        .filter(s => !/[\/]/.test(s) && !parseDate(s));
+      const norm = (s: string) => s.replace(/[^\d+]/g, '');
+      const tel = candTel.find(s => /^\+/.test(s.trim()) && norm(s).length >= 8)
+        || candTel.find(s => { const d = norm(s).replace(/\D/g, ''); return d.length === 10 && d[0] === '3'; })
+        || candTel.find(s => { const d = norm(s).replace(/\D/g, ''); return d.length >= 7 && d.length <= 13; }) || '';
       setF(p => ({
         ...p,
         guest_name: p.guest_name || nombre,
+        guest_phone: p.guest_phone || (tel ? norm(tel) : ''),
         check_in: fechas[0] || p.check_in,
         check_out: fechas[1] || p.check_out,
         total: p.total ?? total,
       }));
-      const leidos = [fechas[0] && 'entrada', fechas[1] && 'salida', total && 'valor', nombre && 'nombre'].filter(Boolean);
+      const leidos = [fechas[0] && 'entrada', fechas[1] && 'salida', total && 'valor', nombre && 'nombre', tel && 'celular'].filter(Boolean);
       setOcrMsg(leidos.length ? `✅ Leído: ${leidos.join(', ')}. Revisa y completa lo que falte.` : 'No se pudo leer bien la imagen. Llena los datos a mano.');
     } catch (e) {
       setOcrMsg('No se pudo leer la imagen. Llena los datos a mano (la foto sí quedó guardada).');
@@ -501,7 +509,7 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
           <input value={f.guest_name} onChange={e => set('guest_name', e.target.value)} placeholder="Ej: Juan Pérez" className={inp + ' mt-1 font-normal'} />
         </label>
         <label className="text-sm font-bold text-gray-600">Celular / WhatsApp
-          <input value={f.guest_phone || ''} onChange={e => set('guest_phone', e.target.value)} placeholder="3001234567" className={inp + ' mt-1 font-normal'} />
+          <input value={f.guest_phone || ''} onChange={e => set('guest_phone', e.target.value)} placeholder="+57 300 123 4567" className={inp + ' mt-1 font-normal'} />
         </label>
         <label className="text-sm font-bold text-gray-600">Correo (opcional)
           <input type="email" value={f.guest_email || ''} onChange={e => set('guest_email', e.target.value)} className={inp + ' mt-1 font-normal'} />
