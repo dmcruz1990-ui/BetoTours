@@ -37,7 +37,12 @@
   <div class="body" id="formArea">
     <p style="font-size:13px;color:#64748b;margin:0">Completa tu registro antes de llegar. Es rápido, seguro y obligatorio según la ley colombiana.</p>
 
-    <div class="sec">1️⃣ Datos del huésped</div>
+    <div class="sec" style="justify-content:space-between">1️⃣ Datos del huésped
+      <label style="background:#16a34a;color:#fff;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        <span id="cargaLbl">📷 Carga tu documento</span>
+        <input type="file" accept="image/*" capture="environment" id="cargaDoc" style="display:none" onchange="onCargaDoc(this)">
+      </label>
+    </div>
     <label>Nombre completo *</label><input id="nombre" placeholder="Nombre y apellidos">
     <div class="row">
       <div><label>Tipo de documento *</label><select id="docType"><option value="CC">CC</option><option value="CE">CE</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option></select></div>
@@ -127,12 +132,23 @@
     catch(e){ lbl.textContent='✓ Foto lista'; return {doc:'',nombre:'',nac:''}; }
   }
 
+  let frontFile=null; // foto del documento del titular (del botón de arriba o de la sección 2)
+  function fillTitular(r){ const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; }; set('nombre',r.nombre); set('docNumber',r.doc); set('nationality',r.nac); }
+
+  async function onCargaDoc(input){
+    const f=input.files[0]; if(!f) return;
+    frontFile=f;
+    const img=document.getElementById('frontPrev'); img.src=URL.createObjectURL(f); img.style.display='block'; document.getElementById('frontLbl').textContent='✓ Foto lista';
+    const r=await ocrDoc(f,document.getElementById('cargaLbl'));
+    document.getElementById('cargaLbl').textContent='✓ Documento cargado';
+    fillTitular(r);
+  }
   async function onDoc(input){
     const f=input.files[0]; if(!f) return;
+    frontFile=f;
     prev(input,'frontPrev','frontLbl');
     const r=await ocrDoc(f,document.getElementById('frontLbl'));
-    const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; };
-    set('nombre',r.nombre); set('docNumber',r.doc); set('nationality',r.nac);
+    fillTitular(r);
   }
   async function onAcomp(input,i){
     const f=input.files[0]; if(!f) return;
@@ -184,7 +200,7 @@
     const g=id=>document.getElementById(id).value.trim();
     const msg=document.getElementById('msg');
     if(!g('nombre')||!g('docNumber')||!g('nationality')||!g('phone')){ msg.style.color='#dc2626'; msg.textContent='Completa los campos obligatorios (*).'; return; }
-    if(!document.getElementById('docFront').files[0]){ msg.style.color='#dc2626'; msg.textContent='Sube la foto del frente del documento.'; return; }
+    if(!frontFile){ msg.style.color='#dc2626'; msg.textContent='Carga la foto de tu documento (botón "Carga tu documento" o sección 2).'; return; }
     if(!firmado){ msg.style.color='#dc2626'; msg.textContent='Por favor firma en el recuadro.'; return; }
     if(!document.getElementById('accept').checked){ msg.style.color='#dc2626'; msg.textContent='Debes aceptar la autorización de datos.'; return; }
     // Recoger acompañantes
@@ -200,7 +216,7 @@
     }
     const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='#15803d'; msg.textContent='Subiendo documentos…';
     try{
-      const front=await subir(document.getElementById('docFront').files[0],'front');
+      const front=await subir(frontFile,'front');
       const back=document.getElementById('docBack').files[0]?await subir(document.getElementById('docBack').files[0],'back'):null;
       for(const c of companions){ c.doc_front = await subir(c._file,'acomp'); delete c._file; }
       let ip=''; try{ ip=(await (await fetch('https://api.ipify.org?format=json')).json()).ip; }catch(e){}
