@@ -128,7 +128,7 @@
 
   // Lector en la nube (OCR.space). 'helloworld' = clave de prueba (lenta/limitada).
   // 👉 Saca tu clave GRATIS en https://ocr.space/ocrapi y pégala aquí:
-  const OCR_API_KEY='helloworld';
+  const OCR_API_KEY='K82770754488957';
   function comprimir(file,maxW){ return new Promise(res=>{ const img=new Image(); img.onload=()=>{ const sc=Math.min(1,maxW/img.width); const w=Math.round(img.width*sc), h=Math.round(img.height*sc); const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h); c.toBlob(b=>res(b||file),'image/jpeg',0.7); }; img.onerror=()=>res(file); img.src=URL.createObjectURL(file); }); }
   async function ocrCloud(file){
     const blob=await comprimir(file,1400);
