@@ -1253,7 +1253,7 @@ const fechasDeTexto = (str: string): string[] => {
   return [...new Set(out)];
 };
 
-const parseReservaTexto = (texto: string): { campos: string[]; data: Partial<Reservation> } => {
+const parseReservaTexto = (texto: string): { campos: string[]; data: Partial<Reservation>; adults: number | null; children: number | null } => {
   const t = (texto || '').trim();
   const flat = t.replace(/\s+/g, ' ');
   const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
@@ -1308,11 +1308,31 @@ const parseReservaTexto = (texto: string): { campos: string[]; data: Partial<Res
   }
   if (nombre) { data.guest_name = nombre; campos.push('nombre'); }
 
-  // Personas
-  let gStr = afterLabel(['cantidad de personas', 'n[uú]mero de personas', 'no\\.? de personas', '# personas', 'personas', 'hu[eé]spedes', 'adultos', 'pax', 'people', 'guests']);
-  let gn = gStr && (gStr.match(/\d+/) || [])[0];
-  if (!gn) { const m = flat.match(/(\d+)\s*(?:personas?|hu[eé]spedes?|adultos?|pax|people|guests)/i); gn = m && m[1]; }
-  if (gn) { data.guests = Math.max(1, Number(gn)); campos.push('personas'); }
+  // Adultos / Niños (por separado). Tomamos el número más cercano a la palabra,
+  // así funciona "3 adultos", "Adultos: 4" y "Adultos: 4 Niños: 1" en una línea.
+  const countNear = (word: string): number | null => {
+    const m = flat.match(new RegExp(`(\\d+)?\\s*(?:${word})\\s*([:=])?\\s*(\\d+)?`, 'i'));
+    if (!m) return null;
+    const before = m[1] != null ? Number(m[1]) : null;
+    const after = m[3] != null ? Number(m[3]) : null;
+    if (m[2] && after != null) return after; // "Adultos: 4" → número después de los dos puntos
+    return before != null ? before : after;   // "3 adultos" → número antes
+  };
+  let adults = countNear('adultos?|adults');
+  let children = countNear('ni[nñ]os?|menores|kids|infantes?');
+  if (adults != null) campos.push('adultos');
+  if (children != null) campos.push('niños');
+
+  // Total de personas (adultos + niños, o el número que venga suelto)
+  if (adults != null || children != null) {
+    data.guests = Math.max(1, (adults || 0) + (children || 0));
+    if (!campos.includes('adultos') && !campos.includes('niños')) campos.push('personas');
+  } else {
+    let gStr = afterLabel(['cantidad de personas', 'n[uú]mero de personas', 'no\\.? de personas', '# personas', 'personas', 'hu[eé]spedes', 'pax', 'people', 'guests']);
+    let gn = gStr && (gStr.match(/\d+/) || [])[0];
+    if (!gn) { const m = flat.match(/(\d+)\s*(?:personas?|hu[eé]spedes?|pax|people|guests)/i); gn = m && m[1]; }
+    if (gn) { data.guests = Math.max(1, Number(gn)); campos.push('personas'); }
+  }
 
   // Fechas (entrada / salida)
   let ci = fechaTrasEtiqueta(['entrada', 'llegada', 'check\\s*-?\\s*in', 'ingreso', 'desde', 'in']);
@@ -1322,7 +1342,7 @@ const parseReservaTexto = (texto: string): { campos: string[]; data: Partial<Res
   if (ci) { data.check_in = ci; campos.push('entrada'); }
   if (co && co > (ci || '')) { data.check_out = co; campos.push('salida'); }
 
-  return { campos, data };
+  return { campos, data, adults, children };
 };
 
 // Separa una fila en celdas: por tabs, o CSV con comillas
@@ -1583,13 +1603,217 @@ const SetupBanner: React.FC = () => (
   </div>
 );
 
+// ============ RESERVA RÁPIDA (pegar mensaje → revisar → crear con PDF/WhatsApp) ============
+const QuickReservation: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
+  const [step, setStep] = useState<'paste' | 'review' | 'done'>('paste');
+  const [pasteText, setPasteText] = useState('');
+  const [parseMsg, setParseMsg] = useState('');
+  const [apts, setApts] = useState<Apartment[]>([]);
+  // Campos extraídos / editables
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [ci, setCi] = useState('');
+  const [co, setCo] = useState('');
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
+  const [docType, setDocType] = useState('');
+  const [docNum, setDocNum] = useState('');
+  const [aptId, setAptId] = useState('202');
+  const [price, setPrice] = useState('');
+  const [status, setStatus] = useState<ReservationStatus>('confirmed');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [created, setCreated] = useState<Reservation | null>(null);
+
+  // Lista de apartamentos: de Supabase (con foto/precio) o, si falta, de ROOMS.
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase.from('apartments').select('*').order('sort');
+      if (!error && data && data.length) { setApts(data as Apartment[]); return; }
+      setApts(ROOMS.map(r => ({
+        id: r.id, name: r.name, category: 'Aparta Suite', guests: r.guests, bed: r.bed || '—',
+        price: r.price || '—', image: '', gallery: [], amenities: [], book_url: '', penthouse: !!(r as any).penthouse, active: true, sort: 0,
+      })));
+    })();
+  }, []);
+
+  const apt = apts.find(a => a.id === aptId);
+  // Al elegir apartamento, traer su tarifa
+  useEffect(() => { if (apt && step === 'review') setPrice(apt.price && apt.price !== '—' ? apt.price : ''); }, [aptId, apts.length, step]);
+
+  const analizar = () => {
+    if (!pasteText.trim()) { setParseMsg('Pega primero el mensaje del cliente.'); return; }
+    const { campos, data, adults: a, children: c } = parseReservaTexto(pasteText);
+    if (!campos.length) { setParseMsg('No reconocí datos. Revisa el texto o llena los campos a mano en el siguiente paso.'); }
+    setName(data.guest_name || ''); setPhone(data.guest_phone || ''); setEmail(data.guest_email || '');
+    setCi(data.check_in || ''); setCo(data.check_out || '');
+    setDocType(data.doc_type || ''); setDocNum(data.doc_number || '');
+    setAdults(a != null ? a : (data.guests || 2));
+    setChildren(c != null ? c : 0);
+    setStep('review');
+  };
+
+  const nights = ci && co && co > ci ? nightsBetween(ci, co).length : 0;
+  const ppn = parseMoney(price) || 0;
+  const total = nights * ppn;
+  const guests = Math.max(1, (adults || 0) + (children || 0));
+  const notaPersonas = `${adults || 0} adulto(s)${children ? `, ${children} niño(s)` : ''}`;
+
+  const crear = async () => {
+    if (!name.trim()) { setErr('Escribe el nombre del cliente.'); return; }
+    if (!ci || !co || co <= ci) { setErr('Las fechas no son válidas (la salida debe ser después de la entrada).'); return; }
+    if (!aptId) { setErr('Elige el apartamento.'); return; }
+    setSaving(true); setErr('');
+    const payload: any = {
+      room_id: aptId, room_name: apt?.name || roomById(aptId)?.name || null,
+      guest_name: name.trim(), guest_phone: phone || null, guest_email: email || null,
+      check_in: ci, check_out: co, guests,
+      status, source: 'whatsapp', total: total || null, note: notaPersonas,
+      doc_type: docType || null, doc_number: docNum || null,
+    };
+    const { data: ins, error } = await supabase.from('reservations').insert(payload).select().single();
+    setSaving(false);
+    if (error) { setErr(isMissingTable(error) ? MISSING_TABLE_MSG : error.message); return; }
+    setCreated(ins as Reservation);
+    setStep('done');
+    onCreated();
+  };
+
+  const descargarPDF = () => {
+    if (!apt) return;
+    generarCotizacionPDF({ apt, guest: name, ci, co, nights, guests, ppn, subtotal: total, disc: 0, total, note: notaPersonas });
+  };
+  const enviarWA = () => { if (created) { const l = waLink(created.guest_phone || CONFIRM_PHONE, confirmacionWA(created)); if (l) window.open(l, '_blank'); } };
+
+  const inp = 'w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none font-normal';
+
+  // ---- PASO 3: creada ----
+  if (step === 'done' && created) {
+    return (
+      <div className="max-w-xl mx-auto text-center">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+          <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-3xl mx-auto mb-4"><i className="fa-solid fa-check"></i></div>
+          <h2 className="text-xl font-black text-gray-800">¡Reserva creada!</h2>
+          <p className="text-gray-500 font-bold text-sm mt-1 mb-5">Ya quedó guardada y aparece en el calendario.</p>
+          <div className="bg-gray-50 rounded-xl p-4 text-left text-sm mb-5">
+            <p><b>{created.guest_name}</b> · {apt?.name}</p>
+            <p className="text-gray-500">{fullDate(created.check_in)} → {fullDate(created.check_out)} · {notaPersonas}</p>
+            {total > 0 && <p className="text-green-700 font-black mt-1">{fmtCOP(total)} <span className="text-gray-400 font-bold text-xs">({nights} noche{nights === 1 ? '' : 's'})</span></p>}
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <button onClick={descargarPDF} className="h-11 rounded-xl bg-gray-800 hover:bg-gray-900 text-white font-bold"><i className="fa-solid fa-file-pdf mr-2"></i>Descargar PDF</button>
+            <button onClick={enviarWA} className="h-11 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold"><i className="fa-brands fa-whatsapp mr-2"></i>Enviar por WhatsApp</button>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setStep('paste'); setPasteText(''); setParseMsg(''); setCreated(null); setName(''); setPhone(''); setEmail(''); setCi(''); setCo(''); setDocNum(''); setDocType(''); setAdults(2); setChildren(0); }} className="flex-1 h-10 rounded-xl bg-blue-50 text-blue-700 font-bold hover:bg-blue-100">+ Otra reserva rápida</button>
+            <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- PASO 1: pegar ----
+  if (step === 'paste') {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <button onClick={onClose} className="text-sm font-bold text-gray-500 hover:text-gray-700 mb-3"><i className="fa-solid fa-arrow-left mr-1.5"></i>Volver a reservas</button>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <h2 className="text-xl font-black text-gray-800 mb-1"><i className="fa-solid fa-bolt text-blue-600 mr-2"></i>Reserva rápida</h2>
+          <p className="text-sm text-gray-500 font-bold mb-4">Pega el mensaje que te mandaron por WhatsApp y yo extraigo los datos.</p>
+          <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={8} autoFocus
+            placeholder={'Nombre: María Gómez\nCelular: 3001234567\nCorreo: maria@gmail.com\nEntrada: 21/06/2026\nSalida: 26/06/2026\n5 adultos y 5 niños'}
+            className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none resize-y" />
+          {parseMsg && <p className="text-xs text-amber-600 font-bold mt-2">{parseMsg}</p>}
+          <button onClick={analizar} className="w-full mt-4 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-base">
+            <i className="fa-solid fa-wand-magic-sparkles mr-2"></i>Analizar mensaje
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- PASO 2: revisar ----
+  return (
+    <div className="max-w-2xl mx-auto">
+      <button onClick={() => setStep('paste')} className="text-sm font-bold text-gray-500 hover:text-gray-700 mb-3"><i className="fa-solid fa-arrow-left mr-1.5"></i>Volver a pegar</button>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <h2 className="text-xl font-black text-gray-800 mb-1">Revisa y elige el apartamento</h2>
+        <p className="text-sm text-gray-500 font-bold mb-4">Corrige lo que haga falta. El total se calcula con la tarifa del apartamento.</p>
+        {err && <p className="text-red-500 text-sm mb-4 bg-red-50 border border-red-100 rounded-lg p-3">{err}</p>}
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <label className="text-sm font-bold text-gray-600 sm:col-span-2">Cliente
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre" className={inp + ' mt-1'} />
+          </label>
+          <label className="text-sm font-bold text-gray-600">Celular / WhatsApp
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="3001234567" className={inp + ' mt-1'} />
+          </label>
+          <label className="text-sm font-bold text-gray-600">Correo
+            <input value={email} onChange={e => setEmail(e.target.value)} className={inp + ' mt-1'} />
+          </label>
+          <label className="text-sm font-bold text-gray-600">Entrada
+            <input type="date" value={ci} onChange={e => { setCi(e.target.value); if (e.target.value >= co) setCo(addDaysStr(e.target.value, 1)); }} className={inp + ' mt-1'} />
+          </label>
+          <label className="text-sm font-bold text-gray-600">Salida
+            <input type="date" value={co} min={ci ? addDaysStr(ci, 1) : undefined} onChange={e => setCo(e.target.value)} className={inp + ' mt-1'} />
+          </label>
+          <label className="text-sm font-bold text-gray-600">Adultos
+            <input type="number" min={1} value={adults} onChange={e => setAdults(Math.max(1, Number(e.target.value) || 1))} className={inp + ' mt-1'} />
+          </label>
+          <label className="text-sm font-bold text-gray-600">Niños
+            <input type="number" min={0} value={children} onChange={e => setChildren(Math.max(0, Number(e.target.value) || 0))} className={inp + ' mt-1'} />
+          </label>
+          <label className="text-sm font-bold text-gray-600">Tipo de documento
+            <select value={docType} onChange={e => setDocType(e.target.value)} className={inp + ' mt-1'}>
+              <option value="">—</option><option value="CC">CC</option><option value="CE">CE</option><option value="Pasaporte">Pasaporte</option><option value="TI">TI</option>
+            </select>
+          </label>
+          <label className="text-sm font-bold text-gray-600">N° de documento
+            <input value={docNum} onChange={e => setDocNum(e.target.value)} className={inp + ' mt-1'} />
+          </label>
+        </div>
+
+        {/* Apartamento + tarifa */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-5">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="text-sm font-black text-blue-800">Apartamento
+              <select value={aptId} onChange={e => setAptId(e.target.value)} className={inp + ' mt-1'}>
+                {apts.map(a => <option key={a.id} value={a.id}>{a.name}{a.price && a.price !== '—' ? ` · $${a.price}` : ''}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-black text-blue-800">Tarifa / noche (COP)
+              <input value={price} onChange={e => setPrice(e.target.value)} placeholder="150.000" className={inp + ' mt-1'} />
+            </label>
+          </div>
+          <div className="flex justify-between items-center mt-3 text-sm">
+            <span className="font-bold text-gray-600">{nights} noche{nights === 1 ? '' : 's'} · {guests} huésped(es)</span>
+            <span className="font-black text-green-700 text-lg">{total > 0 ? fmtCOP(total) : '—'}</span>
+          </div>
+        </div>
+
+        <label className="text-sm font-bold text-gray-600 block mt-4">Estado
+          <select value={status} onChange={e => setStatus(e.target.value as ReservationStatus)} className={inp + ' mt-1 sm:w-1/2'}>
+            <option value="confirmed">Confirmada</option><option value="pending">Pendiente</option>
+          </select>
+        </label>
+
+        <button onClick={crear} disabled={saving} className="w-full mt-5 h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black text-base disabled:opacity-50">
+          <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-circle-check'} mr-2`}></i>{saving ? 'Creando…' : 'Crear reserva'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const ReservationsManager: React.FC = () => {
   const [items, setItems] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [filter, setFilter] = useState<'all' | ReservationStatus>('all');
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
-  const [quickMode, setQuickMode] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [live, setLive] = useState(false);
   const [newId, setNewId] = useState<string | null>(null);
@@ -1639,7 +1863,8 @@ const ReservationsManager: React.FC = () => {
     setItems(prev => prev.filter(i => i.id !== r.id));
   };
 
-  if (editing) return <ReservationForm initial={editing} quick={quickMode} onSaved={() => { setEditing(null); setQuickMode(false); load(); }} onCancel={() => { setEditing(null); setQuickMode(false); }} />;
+  if (quickOpen) return <QuickReservation onClose={() => setQuickOpen(false)} onCreated={() => load()} />;
+  if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
   if (importing) return <ImportPanel onDone={() => { setImporting(false); load(); }} onCancel={() => setImporting(false)} />;
   if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
 
@@ -1686,10 +1911,10 @@ const ReservationsManager: React.FC = () => {
           <button onClick={() => setImporting(true)} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 text-sm">
             <i className="fa-solid fa-file-import mr-2"></i>Importar
           </button>
-          <button onClick={() => { setQuickMode(true); setEditing(blankReservation()); }} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 text-sm">
+          <button onClick={() => setQuickOpen(true)} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 text-sm">
             <i className="fa-solid fa-bolt mr-2"></i>Reserva rápida
           </button>
-          <button onClick={() => { setQuickMode(false); setEditing(blankReservation()); }} className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 text-sm">
+          <button onClick={() => setEditing(blankReservation())} className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 text-sm">
             <i className="fa-solid fa-plus mr-2"></i>Nueva reserva
           </button>
         </div>
