@@ -775,8 +775,11 @@ const confirmacionWA = (r: Reservation) => {
     `🏠 ${r.room_name || r.room_id}\n` +
     `📅 Entrada: ${fullDate(r.check_in)} (desde las 3:00 p.m.)\n` +
     `📅 Salida: ${fullDate(r.check_out)} (hasta las 11:00 a.m.)\n\n` +
-    `📖 *Guía de bienvenida* (WiFi, servicios, normas y más):\n` +
-    `https://betotours.com/bienvenida.html\n\n` +
+    `━━━━━━━━━━━━━━━\n` +
+    `📖 *TU GUÍA DE BIENVENIDA*\n` +
+    `👉 https://betotours.com/bienvenida.html\n` +
+    `Ábrela aquí: WiFi y clave, cómo llegar, check-in, qué hacer en Medellín, tours, restaurantes y todas las recomendaciones. ¡Guárdala! 📲\n` +
+    `━━━━━━━━━━━━━━━\n\n` +
     `📍 *Ubicación*\n` +
     `${direccion}\n` +
     `Para llegar fácilmente, usa este enlace:\n` +
