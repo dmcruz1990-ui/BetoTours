@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { supabase, BlogPost, AvailabilityItem, Reservation, ReservationStatus } from '../lib/supabase';
+import { supabase, BlogPost, AvailabilityItem, Reservation, ReservationStatus, Apartment } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface AdminPanelProps {
@@ -13,7 +13,7 @@ const slugify = (s: string) =>
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'checkins' | 'guia' | 'blog'>('inicio');
+  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'apartments' | 'avail' | 'conta' | 'checkins' | 'guia' | 'blog'>('inicio');
 
   // Login real (Supabase Auth)
   const [email, setEmail] = useState('');
@@ -104,6 +104,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('rooms')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'rooms' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-calendar-days mr-2"></i>Por habitación
         </button>
+        <button onClick={() => setTab('apartments')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'apartments' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-building mr-2"></i>Apartamentos
+        </button>
         <button onClick={() => setTab('avail')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-toggle-on mr-2"></i>Disponibilidad
         </button>
@@ -121,7 +124,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         </button>
       </div>
 
-      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : tab === 'guia' ? <GuestGuide /> : <BlogManager />}
+      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'apartments' ? <ApartmentsManager /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : tab === 'guia' ? <GuestGuide /> : <BlogManager />}
     </div>
   );
 };
@@ -1629,6 +1632,209 @@ const channelOf = (r: Reservation): string => {
 };
 
 // Color de la barra: por canal (Booking azul, Airbnb dorado, Expedia naranja) y si no, por estado
+// ============ APARTAMENTOS (fotos + precios editables) ============
+const APT_CATS = ['Aparta Suite', 'Estudio', 'Penthouse', 'Casa', 'Finca'];
+
+const ApartmentsSetupBanner: React.FC = () => (
+  <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-5 mb-6 text-sm">
+    <p className="font-black mb-1"><i className="fa-solid fa-database mr-2"></i>Falta activar los apartamentos editables</p>
+    <p>Abre <b>Supabase → SQL Editor → New query</b>, pega el contenido de <code className="bg-amber-100 px-1 rounded">supabase/migrations/0002_apartments.sql</code> y dale <b>Run</b>. Después recarga esta página.</p>
+  </div>
+);
+
+const ApartmentsManager: React.FC = () => {
+  const [items, setItems] = useState<Apartment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+  const [editing, setEditing] = useState<Apartment | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('apartments').select('*').order('sort');
+    if (error && isMissingTable(error)) { setMissing(true); setItems([]); }
+    else { setMissing(false); setItems((data as Apartment[]) || []); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  if (missing) return <ApartmentsSetupBanner />;
+  if (editing) return <ApartmentEditor apt={editing} isNew={!items.some(i => i.id === editing.id)} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
+
+  const blankApt = (): Apartment => ({
+    id: '', name: '', category: 'Aparta Suite', guests: 2, bed: '—', price: '—',
+    image: '', gallery: [], amenities: ['Cocina', 'Baño privado', 'Wifi'], book_url: '', penthouse: false, active: true,
+    sort: (items.reduce((m, i) => Math.max(m, i.sort), 0) + 10),
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <div>
+          <h2 className="text-lg font-black text-gray-800"><i className="fa-solid fa-building text-green-600 mr-2"></i>Apartamentos</h2>
+          <p className="text-xs text-gray-500 font-bold">Edita fotos y precios. Los cambios se reflejan solos en la página pública (alojamientos.html).</p>
+        </div>
+        <button onClick={() => setEditing(blankApt())} className="px-4 h-10 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm">
+          <i className="fa-solid fa-plus mr-1.5"></i>Nuevo apartamento
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-gray-300"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {items.map(a => (
+            <button key={a.id} onClick={() => setEditing(a)}
+              className={`text-left bg-white rounded-2xl border shadow-sm overflow-hidden hover:shadow-md transition ${a.active ? 'border-gray-100' : 'border-gray-200 opacity-60'}`}>
+              <div className="relative h-32 bg-gray-100">
+                {a.image
+                  ? <img src={a.image} alt={a.name} loading="lazy" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-gray-300"><i className="fa-solid fa-image text-3xl"></i></div>}
+                {a.penthouse && <span className="absolute top-2 left-2 bg-yellow-400 text-[10px] font-black px-2 py-0.5 rounded-full"><i className="fa-solid fa-crown mr-1"></i>PH</span>}
+                {!a.active && <span className="absolute top-2 right-2 bg-gray-700 text-white text-[10px] font-black px-2 py-0.5 rounded-full">OCULTO</span>}
+              </div>
+              <div className="p-3">
+                <p className="font-black text-gray-800 text-sm truncate">{a.name}</p>
+                <p className="text-xs text-gray-500 font-bold">{a.guests} huéspedes · {a.bed}</p>
+                <p className="text-green-700 font-black text-sm mt-1">{a.price === '—' ? <span className="text-gray-400">Sin precio</span> : <>${a.price}<span className="text-xs text-gray-400 font-bold"> /noche</span></>}</p>
+                <p className="text-[11px] text-green-600 font-bold mt-1"><i className="fa-solid fa-pen mr-1"></i>Editar</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ApartmentEditor: React.FC<{ apt: Apartment; isNew: boolean; onSaved: () => void; onCancel: () => void }> = ({ apt, isNew, onSaved, onCancel }) => {
+  const [f, setF] = useState<Apartment>({ ...apt });
+  const [busy, setBusy] = useState(false);
+  const [upMain, setUpMain] = useState(false);
+  const [upGal, setUpGal] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k: keyof Apartment, v: any) => setF(p => ({ ...p, [k]: v }));
+
+  const uploadTo = async (file: File): Promise<string | null> => {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${(f.id || 'apt')}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('apartamentos').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) { setErr('No se pudo subir la foto. ¿Corriste el SQL 0002 (crea el bucket)?'); return null; }
+    return supabase.storage.from('apartamentos').getPublicUrl(path).data.publicUrl;
+  };
+
+  const onPickMain = async (file?: File) => { if (!file) return; setUpMain(true); setErr(''); const url = await uploadTo(file); if (url) set('image', url); setUpMain(false); };
+  const onPickGallery = async (file?: File) => { if (!file) return; setUpGal(true); setErr(''); const url = await uploadTo(file); if (url) set('gallery', [...(f.gallery || []), url]); setUpGal(false); };
+
+  const save = async () => {
+    setErr('');
+    if (!f.name.trim()) { setErr('Ponle un nombre al apartamento.'); return; }
+    if (isNew && !f.id.trim()) { setErr('Ponle un ID (ej: 305, casita). Es el mismo que usan las reservas.'); return; }
+    setBusy(true);
+    const payload = {
+      id: f.id.trim(), name: f.name.trim(), category: f.category, guests: Number(f.guests) || 1,
+      bed: f.bed || '—', price: (f.price || '—').trim(), image: f.image || '', gallery: f.gallery || [],
+      amenities: f.amenities || [], book_url: f.book_url || '', penthouse: !!f.penthouse, active: !!f.active, sort: Number(f.sort) || 0,
+    };
+    const { error } = await supabase.from('apartments').upsert(payload, { onConflict: 'id' });
+    setBusy(false);
+    if (error) { setErr('No se pudo guardar: ' + error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <button onClick={onCancel} className="text-sm font-bold text-gray-500 hover:text-gray-700 mb-3"><i className="fa-solid fa-arrow-left mr-1.5"></i>Volver</button>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <h2 className="text-lg font-black text-gray-800 mb-4">{isNew ? 'Nuevo apartamento' : `Editar ${apt.name}`}</h2>
+        {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm font-bold">{err}</div>}
+
+        {/* Foto principal */}
+        <label className="block text-xs font-black text-gray-500 uppercase tracking-wide mb-1.5">Foto principal</label>
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-40 h-28 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+            {f.image ? <img src={f.image} alt="" className="w-full h-full object-cover" /> : <i className="fa-solid fa-image text-3xl text-gray-300"></i>}
+          </div>
+          <div className="flex-1 space-y-2">
+            <label className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg text-sm font-bold cursor-pointer ${upMain ? 'bg-gray-100 text-gray-400' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
+              <i className={`fa-solid ${upMain ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>{upMain ? 'Subiendo…' : 'Subir foto'}
+              <input type="file" accept="image/*" className="hidden" disabled={upMain} onChange={e => onPickMain(e.target.files?.[0])} />
+            </label>
+            <input value={f.image} onChange={e => set('image', e.target.value)} placeholder="…o pega el link de la foto (URL)"
+              className="w-full p-2 border border-gray-200 rounded-lg text-xs" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <label className="text-xs font-black text-gray-500 uppercase tracking-wide">Nombre
+            <input value={f.name} onChange={e => set('name', e.target.value)} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal normal-case text-gray-800" />
+          </label>
+          <label className="text-xs font-black text-gray-500 uppercase tracking-wide">ID {isNew ? '(ej: 305, casita)' : ''}
+            <input value={f.id} disabled={!isNew} onChange={e => set('id', e.target.value)} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal text-gray-800 disabled:bg-gray-50 disabled:text-gray-400" />
+          </label>
+          <label className="text-xs font-black text-gray-500 uppercase tracking-wide">Precio / noche (COP)
+            <input value={f.price} onChange={e => set('price', e.target.value)} placeholder="150.000" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal text-gray-800" />
+          </label>
+          <label className="text-xs font-black text-gray-500 uppercase tracking-wide">Categoría
+            <select value={f.category} onChange={e => set('category', e.target.value)} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal text-gray-800">
+              {APT_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-black text-gray-500 uppercase tracking-wide">Huéspedes
+            <input type="number" min={1} value={f.guests} onChange={e => set('guests', e.target.value)} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal text-gray-800" />
+          </label>
+          <label className="text-xs font-black text-gray-500 uppercase tracking-wide">Cama
+            <input value={f.bed} onChange={e => set('bed', e.target.value)} placeholder="Cama 1.40" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal text-gray-800" />
+          </label>
+        </div>
+
+        <label className="block text-xs font-black text-gray-500 uppercase tracking-wide mb-1">Comodidades (separadas por coma)
+          <input value={(f.amenities || []).join(', ')} onChange={e => set('amenities', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+            placeholder="Cocina, Baño privado, Smart TV, Wifi" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal text-gray-800" />
+        </label>
+
+        <label className="block text-xs font-black text-gray-500 uppercase tracking-wide mb-1 mt-4">Link de reserva online (Ayenda)
+          <input value={f.book_url} onChange={e => set('book_url', e.target.value)} placeholder="https://engine.ayenda.co/…" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-xs font-normal text-gray-800" />
+        </label>
+
+        {/* Galería */}
+        <label className="block text-xs font-black text-gray-500 uppercase tracking-wide mb-1.5 mt-4">Fotos adicionales (galería para el cotizador)</label>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {(f.gallery || []).map((g, i) => (
+            <div key={i} className="relative w-20 h-16 rounded-lg overflow-hidden bg-gray-100 group">
+              <img src={g} alt="" className="w-full h-full object-cover" />
+              <button onClick={() => set('gallery', f.gallery.filter((_, j) => j !== i))}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100"><i className="fa-solid fa-xmark"></i></button>
+            </div>
+          ))}
+          <label className={`w-20 h-16 rounded-lg border-2 border-dashed flex items-center justify-center cursor-pointer ${upGal ? 'border-gray-200 text-gray-300' : 'border-green-300 text-green-500 hover:bg-green-50'}`}>
+            <i className={`fa-solid ${upGal ? 'fa-spinner fa-spin' : 'fa-plus'}`}></i>
+            <input type="file" accept="image/*" className="hidden" disabled={upGal} onChange={e => onPickGallery(e.target.files?.[0])} />
+          </label>
+        </div>
+
+        <div className="flex items-center gap-5 mt-4 mb-5">
+          <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={f.active} onChange={e => set('active', e.target.checked)} className="w-4 h-4 accent-green-600" />Mostrar en la web
+          </label>
+          <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={f.penthouse} onChange={e => set('penthouse', e.target.checked)} className="w-4 h-4 accent-green-600" />Penthouse
+          </label>
+          <label className="flex items-center gap-2 text-sm font-bold text-gray-700">Orden
+            <input type="number" value={f.sort} onChange={e => set('sort', e.target.value)} className="w-20 p-1.5 border border-gray-200 rounded-lg text-sm font-normal" />
+          </label>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={save} disabled={busy} className="flex-1 h-11 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black disabled:opacity-50">
+            <i className={`fa-solid ${busy ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-2`}></i>{busy ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button onClick={onCancel} className="px-5 h-11 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const barColor = (r: Reservation): { cls: string; label: string } => {
   if (isBlock(r)) return { cls: 'bg-gray-400 text-white', label: 'Bloqueado' };
   const ch = channelOf(r);
