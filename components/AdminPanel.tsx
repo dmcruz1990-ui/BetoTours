@@ -13,7 +13,7 @@ const slugify = (s: string) =>
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'checkins' | 'blog'>('inicio');
+  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'checkins' | 'guia' | 'blog'>('inicio');
 
   // Login real (Supabase Auth)
   const [email, setEmail] = useState('');
@@ -113,12 +113,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('checkins')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'checkins' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-id-card mr-2"></i>Check-ins
         </button>
+        <button onClick={() => setTab('guia')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'guia' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-book-open mr-2"></i>Guía
+        </button>
         <button onClick={() => setTab('blog')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'blog' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-newspaper mr-2"></i>Blog
         </button>
       </div>
 
-      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : <BlogManager />}
+      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : tab === 'guia' ? <GuestGuide /> : <BlogManager />}
     </div>
   );
 };
@@ -244,6 +247,56 @@ const NotificationBell: React.FC<{ onOpenReservas: () => void }> = ({ onOpenRese
           </div>
         </>
       )}
+    </div>
+  );
+};
+
+// ============ GUÍA DE BIENVENIDA DEL HUÉSPED ============
+// Muestra la guía (public/bienvenida.html) y deja compartirla con el huésped.
+const GUIA_URL = 'https://betotours.com/bienvenida.html';
+
+const GuestGuide: React.FC = () => {
+  const [copied, setCopied] = useState(false);
+  const waText = encodeURIComponent(`¡Hola! 😊 Aquí tienes tu guía de bienvenida de Aparta Suites Torre de Prado (WiFi, horarios, servicios y más):\n${GUIA_URL}`);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(GUIA_URL); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+    catch { window.prompt('Copia el enlace de la guía:', GUIA_URL); }
+  };
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+        <div>
+          <h2 className="text-xl font-black text-gray-900">Guía de bienvenida del huésped</h2>
+          <p className="text-gray-500 text-sm">Compártela con tus huéspedes: WiFi, horarios, servicios, ubicación, normas, tours y contactos. Se envía sola en el WhatsApp de confirmación.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <a href={`https://wa.me/?text=${waText}`} target="_blank" rel="noopener"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500 text-white font-bold text-sm hover:bg-green-600">
+            <i className="fa-brands fa-whatsapp"></i>Compartir por WhatsApp
+          </a>
+          <button onClick={copy}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200">
+            <i className={`fa-solid ${copied ? 'fa-check text-green-600' : 'fa-link'}`}></i>{copied ? '¡Enlace copiado!' : 'Copiar enlace'}
+          </button>
+          <a href="/bienvenida.html" target="_blank" rel="noopener"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200">
+            <i className="fa-solid fa-up-right-from-square"></i>Abrir
+          </a>
+        </div>
+      </div>
+
+      {/* Vista previa de la guía tal como la ve el huésped */}
+      <div className="bg-gray-100 rounded-2xl border border-gray-200 p-3 sm:p-5 flex justify-center">
+        <iframe
+          src="/bienvenida.html"
+          title="Guía de bienvenida"
+          className="w-full max-w-[420px] h-[640px] rounded-2xl bg-white shadow-lg border border-gray-200"
+        />
+      </div>
+      <p className="text-[11px] text-gray-400 mt-3 text-center">
+        <i className="fa-solid fa-circle-info mr-1"></i>
+        Así se ve en el celular del huésped. El enlace público es <b>{GUIA_URL}</b> (queda activo cuando la página se publique).
+      </p>
     </div>
   );
 };
