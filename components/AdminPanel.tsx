@@ -13,7 +13,7 @@ const slugify = (s: string) =>
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'apartments' | 'avail' | 'conta' | 'checkins' | 'guia' | 'blog'>('inicio');
+  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'apartments' | 'cotizador' | 'avail' | 'conta' | 'checkins' | 'guia' | 'blog'>('inicio');
 
   // Login real (Supabase Auth)
   const [email, setEmail] = useState('');
@@ -107,6 +107,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('apartments')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'apartments' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-building mr-2"></i>Apartamentos
         </button>
+        <button onClick={() => setTab('cotizador')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'cotizador' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-file-invoice-dollar mr-2"></i>Cotizador
+        </button>
         <button onClick={() => setTab('avail')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-toggle-on mr-2"></i>Disponibilidad
         </button>
@@ -124,7 +127,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         </button>
       </div>
 
-      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'apartments' ? <ApartmentsManager /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : tab === 'guia' ? <GuestGuide /> : <BlogManager />}
+      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'apartments' ? <ApartmentsManager /> : tab === 'cotizador' ? <Cotizador /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : tab === 'guia' ? <GuestGuide /> : <BlogManager />}
     </div>
   );
 };
@@ -1829,6 +1832,221 @@ const ApartmentEditor: React.FC<{ apt: Apartment; isNew: boolean; onSaved: () =>
             <i className={`fa-solid ${busy ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-2`}></i>{busy ? 'Guardando…' : 'Guardar'}
           </button>
           <button onClick={onCancel} className="px-5 h-11 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============ COTIZADOR (PDF con foto del apartamento) ============
+const fmtCOP = (n: number) => '$' + new Intl.NumberFormat('es-CO').format(Math.round(n || 0));
+
+interface QuoteData { apt: Apartment; guest: string; ci: string; co: string; nights: number; guests: number; ppn: number; subtotal: number; disc: number; total: number; note: string; }
+
+const generarCotizacionPDF = (q: QuoteData) => {
+  const w = window.open('', '_blank', 'width=820,height=900');
+  if (!w) { alert('Permite las ventanas emergentes para generar el PDF.'); return; }
+  const folio = Date.now().toString().slice(-6);
+  const hoy = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  const amen = (q.apt.amenities || []).map(a => `<span style="display:inline-block;background:#f0fdf4;color:#15803d;font-size:11px;font-weight:bold;padding:4px 9px;border-radius:20px;margin:0 4px 4px 0">${a}</span>`).join('');
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cotización ${q.apt.name}</title>
+  <style>
+    *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+    body{margin:0;color:#1e293b;background:#fff}
+    .wrap{max-width:720px;margin:0 auto;padding:32px}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #16a34a;padding-bottom:16px;margin-bottom:24px}
+    .head h1{margin:0;font-size:22px;color:#15803d}
+    .head p{margin:2px 0;font-size:13px;color:#64748b}
+    .badge{display:inline-block;background:#dcfce7;color:#15803d;font-weight:bold;font-size:12px;padding:5px 12px;border-radius:20px}
+    .hero{position:relative;border-radius:14px;overflow:hidden;margin-bottom:8px;background:#f1f5f9;height:280px}
+    .hero img{width:100%;height:100%;object-fit:cover}
+    .hero .name{position:absolute;left:0;bottom:0;right:0;padding:18px;background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff}
+    .hero .name h2{margin:0;font-size:22px;border:none;padding:0;color:#fff}
+    .hero .name p{margin:3px 0 0;font-size:13px;opacity:.92}
+    h2{font-size:15px;color:#0f172a;border-left:4px solid #16a34a;padding-left:8px;margin:24px 0 12px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    td{padding:9px 4px;border-bottom:1px solid #f1f5f9}
+    td.l{color:#64748b;font-weight:bold;width:50%}
+    td.r{text-align:right}
+    .total{background:#f0fdf4;border-radius:10px;padding:16px 18px;margin-top:14px;display:flex;justify-content:space-between;align-items:center}
+    .total .v{font-size:26px;font-weight:bold;color:#15803d}
+    .foot{margin-top:28px;font-size:12px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:16px}
+    @media print{.no-print{display:none}}
+    .btn{background:#16a34a;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px}
+  </style></head><body><div class="wrap">
+    <div class="no-print" style="text-align:right;margin-bottom:12px"><button class="btn" onclick="window.print()">⬇️ Descargar / Imprimir PDF</button></div>
+    <div class="head">
+      <div><h1>🏨 ${HOTEL.name}</h1><p>${HOTEL.address}</p><p>Tel: ${HOTEL.phone}</p></div>
+      <div style="text-align:right"><div class="badge">COTIZACIÓN</div><p style="margin-top:8px">N.º ${folio}</p><p>${hoy}</p></div>
+    </div>
+    ${q.guest ? `<p style="font-size:14px">Estimado/a <b>${q.guest}</b>, le compartimos su cotización:</p>` : ''}
+    <div class="hero">
+      ${q.apt.image ? `<img src="${q.apt.image}" alt="${q.apt.name}">` : ''}
+      <div class="name"><h2>${q.apt.name}</h2><p>👥 Hasta ${q.apt.guests} huéspedes · 🛏️ ${q.apt.bed}</p></div>
+    </div>
+    <div style="margin:12px 0">${amen}</div>
+    <h2>Detalle de la estadía</h2>
+    <table>
+      <tr><td class="l">Entrada (check-in)</td><td class="r">${fullDate(q.ci)} · 3:00 PM</td></tr>
+      <tr><td class="l">Salida (check-out)</td><td class="r">${fullDate(q.co)} · 11:00 AM</td></tr>
+      <tr><td class="l">Noches</td><td class="r">${q.nights} noche${q.nights === 1 ? '' : 's'}</td></tr>
+      <tr><td class="l">Huéspedes</td><td class="r">${q.guests}</td></tr>
+      <tr><td class="l">Tarifa por noche</td><td class="r">${fmtCOP(q.ppn)}</td></tr>
+      <tr><td class="l">Subtotal (${q.nights} × ${fmtCOP(q.ppn)})</td><td class="r">${fmtCOP(q.subtotal)}</td></tr>
+      ${q.disc > 0 ? `<tr><td class="l">Descuento</td><td class="r" style="color:#dc2626">– ${fmtCOP(q.disc)}</td></tr>` : ''}
+    </table>
+    <div class="total"><span style="font-weight:bold;font-size:15px">TOTAL</span><span class="v">${fmtCOP(q.total)}</span></div>
+    ${q.note ? `<h2>Notas</h2><p style="font-size:13px;color:#475569;white-space:pre-wrap">${q.note}</p>` : ''}
+    <div class="foot">
+      <p><b>Cotización válida por 3 días.</b> Sujeta a disponibilidad al momento de confirmar.</p>
+      <p>Reserva directa: betotours.com/alojamientos.html · WhatsApp ${HOTEL.phone}</p>
+      <p>¡Gracias por elegir ${HOTEL.name} by Beto Tours! 🌿</p>
+    </div>
+  </div></body></html>`;
+  w.document.write(html); w.document.close();
+};
+
+const Cotizador: React.FC = () => {
+  const [apts, setApts] = useState<Apartment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+  const [aptId, setAptId] = useState('');
+  const [guest, setGuest] = useState('');
+  const [phone, setPhone] = useState('');
+  const [ci, setCi] = useState(todayStr());
+  const [co, setCo] = useState(addDaysStr(todayStr(), 1));
+  const [guests, setGuests] = useState(2);
+  const [priceStr, setPriceStr] = useState('');
+  const [discount, setDiscount] = useState('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const { data, error } = await supabase.from('apartments').select('*').order('sort');
+      if (error && isMissingTable(error)) { setMissing(true); }
+      else { setMissing(false); const list = (data as Apartment[]) || []; setApts(list); if (list[0]) setAptId(list[0].id); }
+      setLoading(false);
+    })();
+  }, []);
+
+  const apt = apts.find(a => a.id === aptId);
+  // Al cambiar de apartamento, autollenar la tarifa con su precio
+  useEffect(() => { if (apt) { setPriceStr(apt.price && apt.price !== '—' ? apt.price : ''); setGuests(apt.guests || 2); } }, [aptId]);
+
+  if (missing) return <ApartmentsSetupBanner />;
+  if (loading) return <div className="text-center py-12 text-gray-300"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
+  if (!apts.length) return <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-5 text-sm">No hay apartamentos. Ve a la pestaña <b>Apartamentos</b> y agrega al menos uno.</div>;
+
+  const nights = Math.max(0, daysDiff(ci, co));
+  const ppn = parseMoney(priceStr) || 0;
+  const subtotal = nights * ppn;
+  const disc = parseMoney(discount) || 0;
+  const total = Math.max(0, subtotal - disc);
+  const ready = !!apt && nights > 0 && ppn > 0;
+
+  const quote = (): QuoteData => ({ apt: apt!, guest: guest.trim(), ci, co, nights, guests, ppn, subtotal, disc, total, note: note.trim() });
+
+  const mensajeWA = () => {
+    const q = quote();
+    const lineas = [
+      `¡Hola${q.guest ? ' ' + q.guest.split(' ')[0] : ''}! 😊`,
+      ``,
+      `Cotización *${HOTEL.name}* by Beto Tours`,
+      ``,
+      `🏠 *${q.apt.name}*`,
+      `👥 Hasta ${q.apt.guests} huéspedes · 🛏️ ${q.apt.bed}`,
+      `📅 ${fullDate(q.ci)} → ${fullDate(q.co)} (${q.nights} noche${q.nights === 1 ? '' : 's'})`,
+      ``,
+      `💵 ${fmtCOP(q.ppn)} x ${q.nights} = ${fmtCOP(q.subtotal)}`,
+      ...(q.disc > 0 ? [`🎁 Descuento: – ${fmtCOP(q.disc)}`] : []),
+      `*TOTAL: ${fmtCOP(q.total)}*`,
+      ...(q.apt.image ? [``, `📸 ${q.apt.image}`] : []),
+      ...(q.note ? [``, q.note] : []),
+      ``,
+      `🏨 Reserva directa: betotours.com/alojamientos.html`,
+      `_Cotización válida por 3 días, sujeta a disponibilidad._`,
+    ];
+    return lineas.join('\n');
+  };
+
+  const enviarWA = () => {
+    const link = waLink(phone || CONFIRM_PHONE, mensajeWA());
+    if (link) window.open(link, '_blank');
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-4">
+        <h2 className="text-lg font-black text-gray-800"><i className="fa-solid fa-file-invoice-dollar text-green-600 mr-2"></i>Cotizador</h2>
+        <p className="text-xs text-gray-500 font-bold">Arma una cotización con la foto del apartamento y genérala en PDF o envíala por WhatsApp.</p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-5">
+        {/* Formulario */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+          <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Apartamento
+            <select value={aptId} onChange={e => setAptId(e.target.value)} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal text-gray-800">
+              {apts.map(a => <option key={a.id} value={a.id}>{a.name}{a.price !== '—' ? ` · $${a.price}` : ''}</option>)}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Cliente (opcional)
+              <input value={guest} onChange={e => setGuest(e.target.value)} placeholder="Nombre" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+            </label>
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">WhatsApp
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="3001234567" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Entrada
+              <input type="date" value={ci} onChange={e => { setCi(e.target.value); if (e.target.value >= co) setCo(addDaysStr(e.target.value, 1)); }} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+            </label>
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Salida
+              <input type="date" value={co} min={addDaysStr(ci, 1)} onChange={e => setCo(e.target.value)} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+            </label>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Huéspedes
+              <input type="number" min={1} value={guests} onChange={e => setGuests(Number(e.target.value) || 1)} className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+            </label>
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Tarifa/noche
+              <input value={priceStr} onChange={e => setPriceStr(e.target.value)} placeholder="150.000" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+            </label>
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Descuento
+              <input value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+            </label>
+          </div>
+          <label className="block text-xs font-black text-gray-500 uppercase tracking-wide">Notas (opcional)
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Incluye parqueadero, late check-out, etc." className="mt-1 w-full p-2.5 border border-gray-200 rounded-lg text-sm font-normal" />
+          </label>
+        </div>
+
+        {/* Vista previa */}
+        <div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="relative h-40 bg-gray-100">
+              {apt?.image ? <img src={apt.image} alt={apt.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-300"><i className="fa-solid fa-image text-3xl"></i></div>}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-white">
+                <p className="font-black">{apt?.name}</p>
+                <p className="text-xs opacity-90">👥 {apt?.guests} · 🛏️ {apt?.bed}</p>
+              </div>
+            </div>
+            <div className="p-4 text-sm">
+              <div className="flex justify-between py-1"><span className="text-gray-500 font-bold">{fmtCOP(ppn)} × {nights} noche{nights === 1 ? '' : 's'}</span><span className="font-bold">{fmtCOP(subtotal)}</span></div>
+              {disc > 0 && <div className="flex justify-between py-1"><span className="text-gray-500 font-bold">Descuento</span><span className="font-bold text-red-500">– {fmtCOP(disc)}</span></div>}
+              <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100"><span className="font-black text-gray-700">TOTAL</span><span className="text-2xl font-black text-green-700">{fmtCOP(total)}</span></div>
+              {!ready && <p className="text-xs text-amber-600 font-bold mt-2"><i className="fa-solid fa-circle-info mr-1"></i>Elige fechas válidas y una tarifa para generar la cotización.</p>}
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button disabled={!ready} onClick={() => generarCotizacionPDF(quote())} className="flex-1 h-11 rounded-xl bg-gray-800 hover:bg-gray-900 text-white font-bold disabled:opacity-40">
+              <i className="fa-solid fa-file-pdf mr-2"></i>Generar PDF
+            </button>
+            <button disabled={!ready} onClick={enviarWA} className="flex-1 h-11 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold disabled:opacity-40">
+              <i className="fa-brands fa-whatsapp mr-2"></i>Enviar WhatsApp
+            </button>
+          </div>
         </div>
       </div>
     </div>
