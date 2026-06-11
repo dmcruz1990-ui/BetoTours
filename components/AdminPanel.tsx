@@ -531,6 +531,9 @@ const addDaysStr = (s: string, n: number) => {
   const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n);
   return ymd(d.getFullYear(), d.getMonth(), d.getDate());
 };
+// Días enteros entre dos fechas 'YYYY-MM-DD' (b - a). Positivo si b es posterior.
+const daysDiff = (a: string, b: string) =>
+  Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
 // Noches ocupadas [check_in, check_out) como array de 'YYYY-MM-DD'
 const nightsBetween = (checkIn: string, checkOut: string): string[] => {
   const out: string[] = [];
@@ -1713,12 +1716,6 @@ const TimelineBoard: React.FC = () => {
 
   // Lista de días de la ventana
   const dayList = Array.from({ length: days }, (_, i) => addDaysStr(start, i));
-  // Mapa habitación -> (día -> reserva)
-  const map: Record<string, Record<string, Reservation>> = {};
-  reservations.forEach(r => {
-    if (!map[r.room_id]) map[r.room_id] = {};
-    nightsBetween(r.check_in, r.check_out).forEach(d => { map[r.room_id][d] = r; });
-  });
 
   const dow = (ds: string) => { const d = new Date(ds + 'T00:00:00'); return WEEKDAYS_ES[(d.getDay() + 6) % 7]; };
   const dayNum = (ds: string) => new Date(ds + 'T00:00:00').getDate();
@@ -1850,41 +1847,68 @@ const TimelineBoard: React.FC = () => {
           {loading ? (
             <div className="text-center py-12 text-gray-300"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>
           ) : ROOMS.map(room => {
-            const rmap = map[room.id] || {};
+            const winEnd = addDaysStr(start, days);
+            // Reservas de esta habitación que tocan la ventana visible
+            const roomRes = reservations.filter(r => r.room_id === room.id && r.check_in < winEnd && r.check_out > start);
             return (
               <div key={room.id} className="flex border-b border-gray-50 hover:bg-gray-50/50">
                 <div className="w-44 flex-shrink-0 px-3 py-3 text-sm font-bold text-gray-700 border-r border-gray-100 flex items-center gap-2">
                   <i className={`fa-solid ${room.penthouse ? 'fa-crown' : 'fa-door-closed'} text-[10px] text-gray-400`}></i>
                   <span className="truncate">{room.name}</span>
                 </div>
-                {dayList.map(ds => {
-                  let r = rmap[ds];
-                  // Vista previa del arrastre: alargar la reserva manual hasta el día sobre el que paso el mouse
-                  const inPreview = drag && dragRes && room.id === drag.roomId && ds >= dragRes.check_in && ds <= drag.overDay;
-                  if (inPreview && !r) r = dragRes!;
-                  const isStart = r && r.check_in === ds;
-                  const isManual = r && r.source === 'manual';
-                  const isLastNight = r && addDaysStr(ds, 1) === r.check_out;
-                  const meta = r ? barColor(r) : null;
-                  return (
+                {/* Fila: celdas de fondo (clic para crear) + barras continuas encima */}
+                <div className="relative flex-shrink-0" style={{ width: COL * days, height: 48 }}>
+                  {/* Celdas de fondo: sombreado de hoy/fin de semana y clic para crear reserva */}
+                  {dayList.map(ds => (
                     <button key={ds}
                       data-day={ds} data-room={room.id}
-                      onPointerDown={(e) => { if (isManual) { e.preventDefault(); draggedRef.current = false; setDrag({ id: r!.id, roomId: room.id, overDay: ds }); } }}
-                      onClick={() => {
-                        if (draggedRef.current) { draggedRef.current = false; return; }
-                        r ? setDetail(r) : setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) }));
-                      }}
-                      title={r ? `${r.guest_name} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)}${isManual ? ' (manual — arrastra el borde para alargar)' : ` (${meta!.label})`}` : `${room.name} · ${fmtDate(ds)} — libre`}
-                      style={{ width: COL, touchAction: isManual ? 'none' : undefined }}
-                      className={`flex-shrink-0 h-12 border-r border-gray-50 relative flex items-center justify-center text-[11px] font-bold overflow-visible ${isManual && isLastNight ? 'cursor-ew-resize' : ''} ${isToday(ds) ? 'bg-green-50/40' : isWeekend(ds) && !r ? 'bg-gray-50/60' : ''}`}>
-                      {r && (
-                        <span className={`absolute inset-y-1.5 left-0.5 right-0.5 rounded ${meta!.cls} flex items-center px-1 whitespace-nowrap overflow-hidden ${isManual && isLastNight ? 'ring-2 ring-white/70' : ''}`}>
-                          {isStart ? r.guest_name.split(' ')[0] : ''}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                      onClick={() => { if (!draggedRef.current) setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) })); draggedRef.current = false; }}
+                      title={`${room.name} · ${fmtDate(ds)} — libre`}
+                      style={{ left: daysDiff(start, ds) * COL, width: COL, touchAction: drag ? 'none' : undefined }}
+                      className={`absolute inset-y-0 border-r border-gray-50 ${isToday(ds) ? 'bg-green-50/40' : isWeekend(ds) ? 'bg-gray-50/60' : ''}`} />
+                  ))}
+
+                  {/* Capa de barras: cada reserva es UNA barra horizontal continua */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    {roomRes.map(r => {
+                      const isManual = r.source === 'manual';
+                      // Durante el arrastre, previsualiza la nueva salida
+                      const effOut = drag && drag.id === r.id ? addDaysStr(drag.overDay, 1) : r.check_out;
+                      const lastNight = addDaysStr(effOut, -1);
+                      const startIdx = daysDiff(start, r.check_in);   // puede ser <0 si empezó antes
+                      const endIdx = daysDiff(start, lastNight);       // puede ser >days-1 si sigue después
+                      const leftIdx = Math.max(0, startIdx);
+                      const rightIdx = Math.min(days - 1, endIdx);
+                      if (rightIdx < leftIdx) return null;
+                      const left = leftIdx * COL;
+                      const width = (rightIdx - leftIdx + 1) * COL;
+                      const clipL = startIdx < 0, clipR = endIdx > days - 1;
+                      const meta = barColor(r);
+                      return (
+                        <div key={r.id}
+                          onClick={() => { if (!draggedRef.current) setDetail(r); draggedRef.current = false; }}
+                          title={`${r.guest_name} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)}${isManual ? ' (manual — arrastra el borde derecho para alargar)' : ` (${meta.label})`}`}
+                          style={{ left: left + 2, width: width - 4, pointerEvents: drag ? 'none' : 'auto' }}
+                          className={`absolute top-1.5 bottom-1.5 ${meta.cls} flex items-center px-2 text-[11px] font-bold whitespace-nowrap overflow-hidden cursor-pointer shadow-sm
+                            ${clipL ? 'rounded-l-none' : 'rounded-l-md'} ${clipR ? 'rounded-r-none' : 'rounded-r-md'}`}>
+                          {clipL && <i className="fa-solid fa-caret-left mr-1 opacity-70"></i>}
+                          <span className="truncate flex-1">{r.guest_name.split(' ')[0]}</span>
+                          {clipR && <i className="fa-solid fa-caret-right ml-1 opacity-70"></i>}
+                          {/* Borde derecho arrastrable para alargar reservas manuales */}
+                          {isManual && !clipR && (
+                            <span
+                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); draggedRef.current = false; setDrag({ id: r.id, roomId: room.id, overDay: lastNight }); }}
+                              title="Arrastra para alargar"
+                              style={{ touchAction: 'none' }}
+                              className="absolute inset-y-0 right-0 w-2.5 cursor-ew-resize bg-white/30 hover:bg-white/60 flex items-center justify-center">
+                              <i className="fa-solid fa-grip-lines-vertical text-[8px] text-white/80"></i>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -1893,8 +1917,8 @@ const TimelineBoard: React.FC = () => {
 
       <p className="text-[11px] text-gray-400 mt-3 text-center">
         <i className="fa-solid fa-circle-info mr-1"></i>
-        Clic en una celda libre para crear una reserva; clic en una barra para abrir la reserva.
-        <br />En reservas <b>manuales</b> (verdes), arrastra el <b>borde derecho</b> (con el ✋) para alargar los días si el huésped se queda más.
+        Cada reserva es una <b>barra continua</b>. Clic en un espacio libre para crear una reserva; clic en una barra para abrir la reserva.
+        <br />En reservas <b>manuales</b> (verdes), arrastra el <b>borde derecho</b> (la manija ⋮) para alargar los días si el huésped se queda más.
       </p>
 
       {detail && <ReservationDetail r={detail} onEdit={() => { setEditing(detail); setDetail(null); }} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load(); }} />}
