@@ -513,6 +513,18 @@
     const room_id = (bkRoom.match(/\d{3}/) || [''])[0];
     const btn = $('bkSubmit'); btn.disabled = true; btn.textContent = 'Enviando...';
     try{
+      // Anti-overbooking: si ya hay una reserva CONFIRMADA que se cruza, no dejamos solicitar.
+      if(room_id){
+        const chk = await fetch(`${SB_URL}/rest/v1/reservations?room_id=eq.${room_id}&status=eq.confirmed&check_in=lt.${co}&check_out=gt.${ci}&select=id`, {
+          headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+        });
+        if(chk.ok){ const taken = await chk.json(); if(Array.isArray(taken) && taken.length){
+          msg.style.color = '#dc2626';
+          msg.textContent = 'Ese apartamento ya está reservado en esas fechas. Elige otras fechas u otro apartamento.';
+          btn.disabled = false; btn.textContent = 'Enviar solicitud';
+          return;
+        }}
+      }
       const res = await fetch(`${SB_URL}/rest/v1/reservations`, {
         method: 'POST',
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },

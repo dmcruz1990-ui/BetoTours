@@ -576,6 +576,26 @@ const blankReservation = (over: Partial<Reservation> = {}): Partial<Reservation>
   status: 'pending', source: 'manual', note: '', ...over,
 });
 
+// ============ ANTI-OVERBOOKING (compartido por todos los medios) ============
+// Busca una reserva CONFIRMADA del mismo apartamento cuyas fechas se crucen con las nuevas.
+// Regla de cruce (intervalo medio-abierto, el día de salida libera el apto):
+//   existente.check_in < nuevo.check_out  Y  existente.check_out > nuevo.check_in
+const buscarConflicto = async (roomId?: string, checkIn?: string, checkOut?: string, excludeId?: string): Promise<Reservation | null> => {
+  if (!roomId || !checkIn || !checkOut) return null;
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('id, guest_name, check_in, check_out')
+    .eq('room_id', roomId)
+    .eq('status', 'confirmed')
+    .lt('check_in', checkOut)
+    .gt('check_out', checkIn);
+  if (error) return null;
+  return ((data as Reservation[]) || []).find(r => r.id !== excludeId) || null;
+};
+
+const mensajeConflicto = (roomId: string, c: Reservation) =>
+  `⛔ ${roomById(roomId)?.name || roomId} ya tiene una reserva confirmada del ${fullDate(c.check_in)} al ${fullDate(c.check_out)} (${c.guest_name}). Cambia las fechas o elige otro apartamento para no hacer overbooking.`;
+
 // ============ FORMULARIO DE RESERVA (compartido) ============
 const ReservationForm: React.FC<{ initial: Partial<Reservation>; quick?: boolean; onSaved: () => void; onCancel: () => void; }> = ({ initial, quick, onSaved, onCancel }) => {
   const [f, setF] = useState<Partial<Reservation>>(initial);
@@ -654,6 +674,9 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; quick?: boolean
     if (!f.guest_name?.trim()) { setErr('Escribe el nombre del huésped.'); return; }
     if (!f.check_in || !f.check_out || f.check_out <= f.check_in) { setErr('Las fechas no son válidas (la salida debe ser después de la entrada).'); return; }
     setSaving(true); setErr('');
+    // Anti-overbooking: no permitir cruce con una reserva confirmada del mismo apartamento.
+    const conflicto = await buscarConflicto(f.room_id, f.check_in, f.check_out, f.id);
+    if (conflicto) { setSaving(false); setErr(mensajeConflicto(f.room_id || '', conflicto)); return; }
     const room = roomById(f.room_id || '');
     const payload: any = {
       room_id: f.room_id, room_name: room?.name || f.room_name || null,
@@ -1665,6 +1688,9 @@ const QuickReservation: React.FC<{ onClose: () => void; onCreated: () => void }>
     if (!ci || !co || co <= ci) { setErr('Las fechas no son válidas (la salida debe ser después de la entrada).'); return; }
     if (!aptId) { setErr('Elige el apartamento.'); return; }
     setSaving(true); setErr('');
+    // Anti-overbooking: no permitir cruce con una reserva confirmada del mismo apartamento.
+    const conflicto = await buscarConflicto(aptId, ci, co);
+    if (conflicto) { setSaving(false); setErr(`⛔ ${apt?.name || aptId} ya está reservado del ${fullDate(conflicto.check_in)} al ${fullDate(conflicto.check_out)} (${conflicto.guest_name}). Elige otras fechas u otro apartamento.`); return; }
     const payload: any = {
       room_id: aptId, room_name: apt?.name || roomById(aptId)?.name || null,
       guest_name: name.trim(), guest_phone: phone || null, guest_email: email || null,
