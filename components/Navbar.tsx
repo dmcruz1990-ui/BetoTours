@@ -47,6 +47,10 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, language, onLa
             <i className="fa-solid fa-bed text-sm"></i>
             {language === 'es' ? 'Alojamientos' : 'Stays'}
           </a>
+          <a href="/bienvenida.html" target="_blank" rel="noopener noreferrer" className="font-bold text-gray-600 hover:text-green-600 inline-flex items-center gap-1">
+            <i className="fa-solid fa-map-location-dot text-sm"></i>
+            {language === 'es' ? 'Guía' : 'Guide'}
+          </a>
           <button onClick={() => go('admin')} className={`font-bold inline-flex items-center gap-1 ${currentView === 'admin' ? 'text-green-600' : 'text-gray-600'} hover:text-green-600`}>
             <i className="fa-solid fa-lock text-xs"></i>
             Admin
@@ -74,6 +78,10 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, language, onLa
           <a href="/alojamientos.html" target="_blank" rel="noopener noreferrer" className="text-left font-bold py-3 border-b border-gray-50 text-gray-700 inline-flex items-center gap-2">
             <i className="fa-solid fa-bed text-sm"></i>
             {language === 'es' ? 'Alojamientos' : 'Stays'}
+          </a>
+          <a href="/bienvenida.html" target="_blank" rel="noopener noreferrer" className="text-left font-bold py-3 border-b border-gray-50 text-gray-700 inline-flex items-center gap-2">
+            <i className="fa-solid fa-map-location-dot text-sm"></i>
+            {language === 'es' ? 'Guía' : 'Guide'}
           </a>
           <button onClick={() => go('admin')} className={`text-left font-bold py-3 border-b border-gray-50 inline-flex items-center gap-2 ${currentView === 'admin' ? 'text-green-600' : 'text-gray-700'}`}>
             <i className="fa-solid fa-lock text-xs"></i>
