@@ -369,7 +369,9 @@
     }catch(e){ /* si falla, se muestran todos como disponibles */ }
   }
 
-  const stays = [
+  // Lista de apartamentos. Arranca con estos por defecto y se reemplaza en vivo
+  // con lo que Beto edite desde el panel admin (tabla apartments en Supabase).
+  let stays = [
     {name:"Aparta Suite 301", cat:"Aparta Suite", guests:4, bed:"Cama 1.40", price:"150.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-10.37.31_9f0aa777-992x935.jpg", amen:["Cocina","Baño privado","Sofá cama","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-301"},
     {name:"Aparta Suite 302", cat:"Aparta Suite", guests:4, bed:"Cama 1.40", price:"130.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-10.45.32_7b7db9ac-992x992.jpg", amen:["Cocina","Baño privado","Sofá cama","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-302"},
     {name:"Aparta Suite 303", cat:"Aparta Suite", guests:3, bed:"Cama 1.40", price:"110.000", img:B+"Imagen-de-WhatsApp-2024-12-17-a-las-10.59.11_5cfc35fb-1-992x864.jpg", amen:["Cocina","Baño privado","Smart TV","Wifi"], book:"https://engine.ayenda.co/aparta-suites-torre-de-prado-303"},
@@ -529,9 +531,36 @@
     }finally{ btn.disabled = false; btn.textContent = 'Enviar solicitud'; }
   }
 
+  // Carga los apartamentos (fotos y precios) que Beto edita desde el panel admin.
+  // Si falla o aún no se ha corrido el SQL, se quedan los de arriba por defecto.
+  async function loadApartments(){
+    try{
+      const res = await fetch(`${SB_URL}/rest/v1/apartments?active=eq.true&select=*&order=sort.asc`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+      });
+      if(!res.ok) return;
+      const rows = await res.json();
+      if(!Array.isArray(rows) || !rows.length) return;
+      stays = rows.map(a => ({
+        name: a.name,
+        cat: a.category || "Aparta Suite",
+        guests: a.guests || 2,
+        bed: a.bed || "—",
+        price: a.price || "—",
+        img: a.image || "",
+        amen: Array.isArray(a.amenities) ? a.amenities : [],
+        book: a.book_url || "",
+        penthouse: !!a.penthouse
+      }));
+      renderFilters();
+      render();
+    }catch(e){ /* respaldo: se quedan los apartamentos por defecto */ }
+  }
+
   renderFilters();
   render();
   loadAvailability();
+  loadApartments();
 </script>
 </body>
 </html>

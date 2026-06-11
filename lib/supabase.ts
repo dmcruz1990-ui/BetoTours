@@ -24,14 +24,31 @@ export interface BlogPost {
   updated_at: string;
 }
 
-export interface AvailabilityItem {
-  id: string;
+export interface AvailabilityItem {  id: string;
   kind: 'tour' | 'stay'; // tour = plan de Beto, stay = aparta suite
   ref_id: string; // id del tour o número/identificador del aparta suite
   name: string;
   is_available: boolean;
   note: string | null;
   updated_at: string;
+}
+
+// Apartamento editable desde el panel (fotos + precios). Lo lee también alojamientos.html.
+export interface Apartment {
+  id: string;            // '301', '601', 'casita'... (mismo room_id de las reservas)
+  name: string;
+  category: string;      // 'Aparta Suite' | 'Estudio' | 'Penthouse' | 'Casa' | 'Finca'
+  guests: number;
+  bed: string;
+  price: string;         // COP por noche, ej '150.000'
+  image: string;         // foto principal (URL)
+  gallery: string[];     // fotos adicionales
+  amenities: string[];
+  book_url: string;
+  penthouse: boolean;
+  active: boolean;
+  sort: number;
+  updated_at?: string;
 }
 
 export type ReservationStatus = 'pending' | 'confirmed' | 'cancelled';
