@@ -577,14 +577,25 @@ const blankReservation = (over: Partial<Reservation> = {}): Partial<Reservation>
 });
 
 // ============ FORMULARIO DE RESERVA (compartido) ============
-const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => void; onCancel: () => void; }> = ({ initial, onSaved, onCancel }) => {
+const ReservationForm: React.FC<{ initial: Partial<Reservation>; quick?: boolean; onSaved: () => void; onCancel: () => void; }> = ({ initial, quick, onSaved, onCancel }) => {
   const [f, setF] = useState<Partial<Reservation>>(initial);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [ocr, setOcr] = useState(false);
   const [ocrMsg, setOcrMsg] = useState('');
   const [err, setErr] = useState('');
+  const [pasteText, setPasteText] = useState('');
+  const [pasteMsg, setPasteMsg] = useState('');
   const set = (k: keyof Reservation, v: any) => setF(p => ({ ...p, [k]: v }));
+
+  // Reserva rápida: pega el mensaje de WhatsApp y carga los datos solos
+  const rellenarDesdeTexto = () => {
+    if (!pasteText.trim()) { setPasteMsg('Pega primero el mensaje del cliente.'); return; }
+    const { campos, data } = parseReservaTexto(pasteText);
+    if (!campos.length) { setPasteMsg('No reconocí datos. Revisa el texto o llena los campos a mano.'); return; }
+    setF(p => ({ ...p, ...data }));
+    setPasteMsg(`✅ Cargué: ${campos.join(', ')}. Elige el apartamento y revisa antes de guardar.`);
+  };
 
   const subirImagen = async (file: File) => {
     setUploadingImg(true); setOcrMsg('');
@@ -664,8 +675,26 @@ const ReservationForm: React.FC<{ initial: Partial<Reservation>; onSaved: () => 
   const inp = 'w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none';
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-2xl">
-      <h2 className="text-xl font-black mb-4">{f.id ? 'Editar reserva' : 'Nueva reserva'}</h2>
+      <h2 className="text-xl font-black mb-4">{f.id ? 'Editar reserva' : quick ? '⚡ Reserva rápida' : 'Nueva reserva'}</h2>
       {err && <p className="text-red-500 text-sm mb-4 bg-red-50 border border-red-100 rounded-lg p-3">{err}</p>}
+
+      {/* Reserva rápida: pega el mensaje de WhatsApp y carga los datos solos */}
+      {!f.id && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+          <p className="text-sm font-black text-blue-800 mb-1"><i className="fa-solid fa-bolt mr-1"></i>Reserva rápida: pega el mensaje del cliente</p>
+          <p className="text-xs text-blue-700/80 mb-2">Pega aquí lo que te mandaron por WhatsApp (nombre, correo, documento, fechas, # de personas) y le doy "Rellenar".</p>
+          <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={4}
+            placeholder={'Ej:\nNombre: Juan Pérez\nCorreo: juan@gmail.com\nDocumento: 1018456789\nEntrada: 15 de junio\nSalida: 18 de junio\nPersonas: 3'}
+            className="w-full p-3 border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none resize-y" />
+          <div className="flex items-center gap-3 mt-2">
+            <button type="button" onClick={rellenarDesdeTexto} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700">
+              <i className="fa-solid fa-wand-magic-sparkles mr-1.5"></i>Rellenar datos
+            </button>
+            {pasteText && <button type="button" onClick={() => { setPasteText(''); setPasteMsg(''); }} className="text-blue-500 hover:text-blue-700 text-sm font-bold">Limpiar</button>}
+          </div>
+          {pasteMsg && <p className="text-xs text-gray-600 mt-2">{pasteMsg}</p>}
+        </div>
+      )}
 
       {/* Subir imagen de la reserva → lee los datos solo (OCR) */}
       <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-5">
@@ -1207,6 +1236,95 @@ const parseMoney = (s: string): number | null => {
   return n || null;
 };
 
+// ===== RESERVA RÁPIDA: parsea un mensaje pegado (WhatsApp) → campos de la reserva =====
+// Detecta nombre, correo, teléfono, documento, fechas y # de personas aunque vengan
+// con etiquetas ("Nombre:", "Entrada:") o en texto libre.
+const fechasDeTexto = (str: string): string[] => {
+  const out = extraerFechas(str); // ISO, dd/mm/aaaa, "9 jun 2026"
+  // Respaldo: "15 de junio" / "15 junio" sin año → asume el año más cercano a futuro
+  const now = new Date();
+  const re = /(\d{1,2})\s*(?:de\s*)?([A-Za-zÁÉÍÓÚáéíóú]{3,})/g; let m: RegExpExecArray | null;
+  while ((m = re.exec(str))) {
+    const mes = MESES_ES[m[2].slice(0, 3).toLowerCase()]; if (!mes) continue;
+    let yr = now.getFullYear(); if (Number(mes) < now.getMonth() + 1) yr += 1;
+    const f = `${yr}-${mes}-${m[1].padStart(2, '0')}`;
+    if (Number(m[1]) >= 1 && Number(m[1]) <= 31) out.push(f);
+  }
+  return [...new Set(out)];
+};
+
+const parseReservaTexto = (texto: string): { campos: string[]; data: Partial<Reservation> } => {
+  const t = (texto || '').trim();
+  const flat = t.replace(/\s+/g, ' ');
+  const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+  const data: Partial<Reservation> = {};
+  const campos: string[] = [];
+
+  const afterLabel = (labels: string[]): string | null => {
+    const group = labels.join('|');
+    // 1) línea que empieza con la etiqueta ("Nombre: Juan")
+    const reLine = new RegExp(`^\\s*(?:${group})\\s*[:=\\-–]?\\s*(.+)$`, 'i');
+    for (const ln of lines) { const m = ln.match(reLine); if (m && m[1] && m[1].trim()) return m[1].trim(); }
+    // 2) etiqueta en medio de una frase ("mi nombre es Juan, cc 123") → hasta coma/; o fin de línea
+    const reIn = new RegExp(`\\b(?:${group})\\b\\s*[:=\\-–]?\\s*(?:es\\s+|son\\s+|:\\s*)?([^,;\\n]+)`, 'i');
+    const m2 = t.match(reIn); if (m2 && m2[1] && m2[1].trim()) return m2[1].trim();
+    return null;
+  };
+  const fechaTrasEtiqueta = (labels: string[]): string | null => {
+    const low = t.toLowerCase();
+    for (const lb of labels) { const i = low.search(new RegExp(lb, 'i')); if (i >= 0) { const fs = fechasDeTexto(t.slice(i)); if (fs[0]) return fs[0]; } }
+    return null;
+  };
+
+  // Correo
+  const email = (flat.match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i) || [])[0];
+  if (email) { data.guest_email = email.toLowerCase(); campos.push('correo'); }
+
+  // Documento (con etiqueta para no confundirlo con el teléfono)
+  const docLine = afterLabel(['n[uú]mero de documento', 'documento', 'c[eé]dula', 'identificaci[oó]n', 'pasaporte', 'c\\.?\\s?c\\.?', 'doc', 'id']) || '';
+  const docNum = (docLine.match(/\d[\d.]{4,}\d/) || [])[0]?.replace(/\./g, '');
+  if (docNum) {
+    data.doc_number = docNum;
+    data.doc_type = /pasaporte|passport/i.test(t) ? 'Pasaporte' : /extranjer/i.test(t) ? 'CE' : 'CC';
+    campos.push('documento');
+  }
+
+  // Teléfono / WhatsApp
+  const norm = (s: string) => s.replace(/[^\d+]/g, '');
+  const labelTel = afterLabel(['whatsapp', 'wsp', 'tel[eé]fono', 'celular', 'cel', 'm[oó]vil', 'movil', 'contacto', 'n[uú]mero']) || '';
+  const candTel = ([labelTel, ...(flat.match(/\+?\d[\d\s().\-]{6,}\d/g) || [])])
+    .map(s => s.trim()).filter(Boolean)
+    .filter(s => !/[\/]/.test(s) && !parseDate(s) && norm(s).replace(/\D/g, '') !== docNum);
+  const tel = candTel.find(s => /^\+/.test(s) && norm(s).length >= 8)
+    || candTel.find(s => { const d = norm(s).replace(/\D/g, ''); return d.length === 10 && d[0] === '3'; })
+    || candTel.find(s => { const d = norm(s).replace(/\D/g, ''); return d.length >= 7 && d.length <= 13; });
+  if (tel) { data.guest_phone = norm(tel); campos.push('teléfono'); }
+
+  // Nombre
+  let nombre = afterLabel(['nombre completo', 'nombre', 'name', 'hu[eé]sped', 'cliente', 'a nombre de', 'reserva a nombre de']);
+  if (nombre) nombre = nombre.replace(/[._]+$/, '').trim();
+  if (!nombre || nombre.includes('@') || !/[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(nombre) || nombre.length > 60) {
+    nombre = lines.map(l => l.trim()).find(l => /^([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+){1,3}[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+$/.test(l)) || '';
+  }
+  if (nombre) { data.guest_name = nombre; campos.push('nombre'); }
+
+  // Personas
+  let gStr = afterLabel(['cantidad de personas', 'n[uú]mero de personas', 'no\\.? de personas', '# personas', 'personas', 'hu[eé]spedes', 'adultos', 'pax', 'people', 'guests']);
+  let gn = gStr && (gStr.match(/\d+/) || [])[0];
+  if (!gn) { const m = flat.match(/(\d+)\s*(?:personas?|hu[eé]spedes?|adultos?|pax|people|guests)/i); gn = m && m[1]; }
+  if (gn) { data.guests = Math.max(1, Number(gn)); campos.push('personas'); }
+
+  // Fechas (entrada / salida)
+  let ci = fechaTrasEtiqueta(['entrada', 'llegada', 'check\\s*-?\\s*in', 'ingreso', 'desde', 'in']);
+  let co = fechaTrasEtiqueta(['salida', 'check\\s*-?\\s*out', 'egreso', 'regreso', 'hasta', 'out']);
+  if (!ci || !co) { const all = fechasDeTexto(t).sort(); if (!ci) ci = all[0]; if (!co) co = all.find(d => d > (ci || '')) || all[1]; }
+  if (ci && co && co <= ci) { const tmp = ci; ci = co > tmp ? co : tmp; } // por si vienen invertidas
+  if (ci) { data.check_in = ci; campos.push('entrada'); }
+  if (co && co > (ci || '')) { data.check_out = co; campos.push('salida'); }
+
+  return { campos, data };
+};
+
 // Separa una fila en celdas: por tabs, o CSV con comillas
 const splitCells = (line: string): string[] => {
   if (line.includes('\t')) return line.split('\t').map(c => c.trim().replace(/^"|"$/g, ''));
@@ -1471,6 +1589,7 @@ const ReservationsManager: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [filter, setFilter] = useState<'all' | ReservationStatus>('all');
   const [editing, setEditing] = useState<Partial<Reservation> | null>(null);
+  const [quickMode, setQuickMode] = useState(false);
   const [importing, setImporting] = useState(false);
   const [live, setLive] = useState(false);
   const [newId, setNewId] = useState<string | null>(null);
@@ -1520,7 +1639,7 @@ const ReservationsManager: React.FC = () => {
     setItems(prev => prev.filter(i => i.id !== r.id));
   };
 
-  if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
+  if (editing) return <ReservationForm initial={editing} quick={quickMode} onSaved={() => { setEditing(null); setQuickMode(false); load(); }} onCancel={() => { setEditing(null); setQuickMode(false); }} />;
   if (importing) return <ImportPanel onDone={() => { setImporting(false); load(); }} onCancel={() => setImporting(false)} />;
   if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
 
@@ -1567,7 +1686,10 @@ const ReservationsManager: React.FC = () => {
           <button onClick={() => setImporting(true)} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 text-sm">
             <i className="fa-solid fa-file-import mr-2"></i>Importar
           </button>
-          <button onClick={() => setEditing(blankReservation())} className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 text-sm">
+          <button onClick={() => { setQuickMode(true); setEditing(blankReservation()); }} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 text-sm">
+            <i className="fa-solid fa-bolt mr-2"></i>Reserva rápida
+          </button>
+          <button onClick={() => { setQuickMode(false); setEditing(blankReservation()); }} className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 text-sm">
             <i className="fa-solid fa-plus mr-2"></i>Nueva reserva
           </button>
         </div>
