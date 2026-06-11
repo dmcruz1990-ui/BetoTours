@@ -498,6 +498,7 @@ interface Room { id: string; name: string; guests: number; bed: string; price: s
 const ROOMS: Room[] = [
   { id: '200', name: 'Aparta Suite 200', guests: 2, bed: '—', price: '—' },
   { id: '201b', name: 'Aparta Suite 201 B', guests: 2, bed: '—', price: '—' },
+  { id: '202', name: 'Aparta Suite 202 (Super Suite)', guests: 10, bed: '—', price: '—' },
   { id: '301', name: 'Aparta Suite 301', guests: 4, bed: 'Cama 1.40', price: '150.000' },
   { id: '302', name: 'Aparta Suite 302', guests: 4, bed: 'Cama 1.40', price: '130.000' },
   { id: '303', name: 'Aparta Suite 303', guests: 3, bed: 'Cama 1.40', price: '110.000' },
