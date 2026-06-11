@@ -13,7 +13,7 @@ const slugify = (s: string) =>
 const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'checkins' | 'blog'>('inicio');
+  const [tab, setTab] = useState<'inicio' | 'reservas' | 'board' | 'rooms' | 'avail' | 'conta' | 'checkins' | 'guia' | 'blog'>('inicio');
 
   // Login real (Supabase Auth)
   const [email, setEmail] = useState('');
@@ -83,9 +83,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
           <h1 className="text-3xl font-black text-gray-900">Panel de administración</h1>
           <p className="text-gray-500 text-sm">{session?.user.email}</p>
         </div>
-        <button onClick={handleLogout} className="px-4 py-2 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-sm">
-          <i className="fa-solid fa-right-from-bracket mr-2"></i>Salir
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell onOpenReservas={() => setTab('reservas')} />
+          <button onClick={handleLogout} className="px-4 py-2 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-sm">
+            <i className="fa-solid fa-right-from-bracket mr-2"></i>Salir
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-8 flex-wrap">
@@ -110,12 +113,190 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         <button onClick={() => setTab('checkins')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'checkins' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-id-card mr-2"></i>Check-ins
         </button>
+        <button onClick={() => setTab('guia')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'guia' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+          <i className="fa-solid fa-book-open mr-2"></i>Guía
+        </button>
         <button onClick={() => setTab('blog')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'blog' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-newspaper mr-2"></i>Blog
         </button>
       </div>
 
-      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : <BlogManager />}
+      {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : tab === 'guia' ? <GuestGuide /> : <BlogManager />}
+    </div>
+  );
+};
+
+// ============ CAMPANITA DE NOTIFICACIONES ============
+// Avisa en vivo cuando entra una reserva nueva (web, Ayenda, Booking…) o cuando se cancela una.
+interface Notif { key: string; kind: 'new' | 'cancel'; title: string; sub: string; at: number; }
+
+const timeAgo = (ms: number) => {
+  const s = Math.floor((Date.now() - ms) / 1000);
+  if (s < 60) return 'hace un momento';
+  const m = Math.floor(s / 60); if (m < 60) return `hace ${m} min`;
+  const h = Math.floor(m / 60); if (h < 24) return `hace ${h} h`;
+  return `hace ${Math.floor(h / 24)} d`;
+};
+
+// Un "ding" corto en base64 (no requiere archivos externos)
+const playDing = () => {
+  try {
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'sine'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    o.start(); o.stop(ctx.currentTime + 0.45);
+  } catch { /* sin sonido */ }
+};
+
+const NotificationBell: React.FC<{ onOpenReservas: () => void }> = ({ onOpenReservas }) => {
+  const [items, setItems] = useState<Notif[]>([]);
+  const [open, setOpen] = useState(false);
+  const [unseen, setUnseen] = useState(0);
+
+  const push = (n: Notif) => {
+    setItems(prev => (prev.some(x => x.key === n.key) ? prev : [n, ...prev].slice(0, 40)));
+    setUnseen(u => u + 1);
+    playDing();
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(n.title, { body: n.sub, icon: '/favicon.ico' });
+      }
+    } catch { /* navegador sin soporte */ }
+  };
+
+  useEffect(() => {
+    try {
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    } catch { /* ignore */ }
+    const ch = supabase.channel('notif-stream')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reservations' }, (payload) => {
+        const r = payload.new as Reservation;
+        if (!r || r.status === 'cancelled' || r.source === 'manual' || isBlock(r)) return;
+        const canal = SOURCE_LABEL[r.source] || r.source;
+        push({
+          key: 'new-' + r.id, kind: 'new', title: '🆕 Nueva reserva',
+          sub: `${r.guest_name} · ${r.room_name || r.room_id} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)} · ${canal}`,
+          at: Date.now(),
+        });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'reservations' }, (payload) => {
+        const r = payload.new as Reservation;
+        const prev = payload.old as any;
+        if (r && r.status === 'cancelled' && prev?.status !== 'cancelled' && !isBlock(r)) {
+          push({
+            key: 'cancel-' + r.id, kind: 'cancel', title: '❌ Reserva cancelada',
+            sub: `${r.guest_name} · ${r.room_name || r.room_id} · ${fmtDate(r.check_in)}`,
+            at: Date.now(),
+          });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  const toggle = () => { setOpen(o => !o); if (!open) setUnseen(0); };
+
+  return (
+    <div className="relative">
+      <button onClick={toggle} title="Notificaciones"
+        className="relative w-11 h-11 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center">
+        <i className={`fa-solid fa-bell text-lg ${unseen > 0 ? 'fa-shake text-green-600' : ''}`}></i>
+        {unseen > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-black flex items-center justify-center">
+            {unseen > 9 ? '9+' : unseen}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 z-40 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="font-black text-gray-800 text-sm"><i className="fa-solid fa-bell mr-2 text-green-600"></i>Notificaciones</span>
+              {items.length > 0 && (
+                <button onClick={() => { setItems([]); setUnseen(0); }} className="text-xs font-bold text-gray-400 hover:text-gray-600">Limpiar</button>
+              )}
+            </div>
+            <div className="max-h-96 overflow-y-auto">
+              {items.length === 0 ? (
+                <div className="px-4 py-10 text-center text-gray-400 text-sm">
+                  <i className="fa-regular fa-bell-slash text-2xl mb-2 block"></i>
+                  Sin novedades por ahora.<br />Te avisaremos al instante cuando entre o se cancele una reserva.
+                </div>
+              ) : items.map(n => (
+                <button key={n.key + n.at} onClick={() => { onOpenReservas(); setOpen(false); }}
+                  className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 flex gap-3">
+                  <span className={`mt-0.5 w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white ${n.kind === 'new' ? 'bg-green-600' : 'bg-red-500'}`}>
+                    <i className={`fa-solid ${n.kind === 'new' ? 'fa-calendar-check' : 'fa-calendar-xmark'} text-xs`}></i>
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-bold text-gray-800 text-sm">{n.title}</span>
+                    <span className="block text-xs text-gray-500 truncate">{n.sub}</span>
+                    <span className="block text-[11px] text-gray-400 mt-0.5">{timeAgo(n.at)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// ============ GUÍA DE BIENVENIDA DEL HUÉSPED ============
+// Muestra la guía (public/bienvenida.html) y deja compartirla con el huésped.
+const GUIA_URL = 'https://betotours.com/bienvenida.html';
+
+const GuestGuide: React.FC = () => {
+  const [copied, setCopied] = useState(false);
+  const waText = encodeURIComponent(`¡Hola! 😊 Aquí tienes tu guía de bienvenida de Aparta Suites Torre de Prado (WiFi, horarios, servicios y más):\n${GUIA_URL}`);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(GUIA_URL); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+    catch { window.prompt('Copia el enlace de la guía:', GUIA_URL); }
+  };
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+        <div>
+          <h2 className="text-xl font-black text-gray-900">Guía de bienvenida del huésped</h2>
+          <p className="text-gray-500 text-sm">Compártela con tus huéspedes: WiFi, horarios, servicios, ubicación, normas, tours y contactos. Se envía sola en el WhatsApp de confirmación.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <a href={`https://wa.me/?text=${waText}`} target="_blank" rel="noopener"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500 text-white font-bold text-sm hover:bg-green-600">
+            <i className="fa-brands fa-whatsapp"></i>Compartir por WhatsApp
+          </a>
+          <button onClick={copy}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200">
+            <i className={`fa-solid ${copied ? 'fa-check text-green-600' : 'fa-link'}`}></i>{copied ? '¡Enlace copiado!' : 'Copiar enlace'}
+          </button>
+          <a href="/bienvenida.html" target="_blank" rel="noopener"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200">
+            <i className="fa-solid fa-up-right-from-square"></i>Abrir
+          </a>
+        </div>
+      </div>
+
+      {/* Vista previa de la guía tal como la ve el huésped */}
+      <div className="bg-gray-100 rounded-2xl border border-gray-200 p-3 sm:p-5 flex justify-center">
+        <iframe
+          src="/bienvenida.html"
+          title="Guía de bienvenida"
+          className="w-full max-w-[420px] h-[640px] rounded-2xl bg-white shadow-lg border border-gray-200"
+        />
+      </div>
+      <p className="text-[11px] text-gray-400 mt-3 text-center">
+        <i className="fa-solid fa-circle-info mr-1"></i>
+        Así se ve en el celular del huésped. El enlace público es <b>{GUIA_URL}</b> (queda activo cuando la página se publique).
+      </p>
     </div>
   );
 };
@@ -584,6 +765,8 @@ const confirmacionWA = (r: Reservation) => {
     `🏠 ${r.room_name || r.room_id}\n` +
     `📅 Entrada: ${fullDate(r.check_in)} (desde las 3:00 p.m.)\n` +
     `📅 Salida: ${fullDate(r.check_out)} (hasta las 11:00 a.m.)\n\n` +
+    `📖 *Guía de bienvenida* (WiFi, servicios, normas y más):\n` +
+    `https://betotours.com/bienvenida.html\n\n` +
     `📍 *Ubicación*\n` +
     `${direccion}\n` +
     `Para llegar fácilmente, usa este enlace:\n` +
@@ -898,9 +1081,15 @@ const Dashboard: React.FC<{ onGoImport: () => void }> = ({ onGoImport }) => {
       {missing && <SetupBanner />}
 
       {/* Saludo */}
-      <div>
-        <h2 className="text-xl font-black text-gray-900">¡Hola, Beto! 👋</h2>
-        <p className="text-gray-500 text-sm capitalize">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-xl font-black text-gray-900">¡Hola, Beto! 👋</h2>
+          <p className="text-gray-500 text-sm capitalize">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        </div>
+        <a href="/bienvenida.html" target="_blank" rel="noopener"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-50 border border-green-200 text-green-700 font-bold text-sm hover:bg-green-100">
+          <i className="fa-solid fa-book-open"></i>Guía de bienvenida del huésped
+        </a>
       </div>
 
       {/* Tarjetas resumen */}
@@ -1477,7 +1666,7 @@ const TimelineBoard: React.FC = () => {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // Al soltar el mouse, guarda la nueva fecha de salida (alargar/acortar reserva manual)
+  // Al soltar, guarda la nueva fecha de salida (alargar/acortar reserva manual)
   const commitDrag = async () => {
     const d = drag;
     setDrag(null);
@@ -1489,13 +1678,35 @@ const TimelineBoard: React.FC = () => {
     await supabase.from('reservations').update({ check_out: newCheckout }).eq('id', res.id);
     load();
   };
-  useEffect(() => {
-    const up = () => { if (drag) commitDrag(); };
-    window.addEventListener('mouseup', up);
-    return () => window.removeEventListener('mouseup', up);
-  });
 
   const dragRes = drag ? reservations.find(x => x.id === drag.id) : null;
+
+  // Arrastre con Pointer Events: funciona igual con mouse, dedo (celular/tablet) o lápiz.
+  // Usamos elementFromPoint para saber sobre qué día está el puntero, porque en táctil
+  // los eventos onMouseEnter no se disparan al arrastrar el dedo.
+  useEffect(() => {
+    if (!drag) return;
+    const move = (e: PointerEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const cell = el?.closest('[data-day]') as HTMLElement | null;
+      if (!cell || cell.dataset.room !== drag.roomId) return;
+      const ds = cell.dataset.day!;
+      const ci = dragRes?.check_in || ds;
+      if (ds >= ci && ds !== drag.overDay) {
+        draggedRef.current = true;
+        setDrag(d => (d ? { ...d, overDay: ds } : d));
+      }
+    };
+    const up = () => commitDrag();
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, [drag, dragRes]);
 
   if (editing) return <ReservationForm initial={editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />;
 
@@ -1656,14 +1867,14 @@ const TimelineBoard: React.FC = () => {
                   const meta = r ? barColor(r) : null;
                   return (
                     <button key={ds}
-                      onMouseDown={(e) => { if (isManual) { e.preventDefault(); draggedRef.current = false; setDrag({ id: r!.id, roomId: room.id, overDay: ds }); } }}
-                      onMouseEnter={() => { if (drag && drag.roomId === room.id && ds !== drag.overDay && ds >= (dragRes?.check_in || ds)) { draggedRef.current = true; setDrag({ ...drag, overDay: ds }); } }}
+                      data-day={ds} data-room={room.id}
+                      onPointerDown={(e) => { if (isManual) { e.preventDefault(); draggedRef.current = false; setDrag({ id: r!.id, roomId: room.id, overDay: ds }); } }}
                       onClick={() => {
                         if (draggedRef.current) { draggedRef.current = false; return; }
                         r ? setDetail(r) : setEditing(blankReservation({ room_id: room.id, check_in: ds, check_out: addDaysStr(ds, 1) }));
                       }}
                       title={r ? `${r.guest_name} · ${fmtDate(r.check_in)}→${fmtDate(r.check_out)}${isManual ? ' (manual — arrastra el borde para alargar)' : ` (${meta!.label})`}` : `${room.name} · ${fmtDate(ds)} — libre`}
-                      style={{ width: COL }}
+                      style={{ width: COL, touchAction: isManual ? 'none' : undefined }}
                       className={`flex-shrink-0 h-12 border-r border-gray-50 relative flex items-center justify-center text-[11px] font-bold overflow-visible ${isManual && isLastNight ? 'cursor-ew-resize' : ''} ${isToday(ds) ? 'bg-green-50/40' : isWeekend(ds) && !r ? 'bg-gray-50/60' : ''}`}>
                       {r && (
                         <span className={`absolute inset-y-1.5 left-0.5 right-0.5 rounded ${meta!.cls} flex items-center px-1 whitespace-nowrap overflow-hidden ${isManual && isLastNight ? 'ring-2 ring-white/70' : ''}`}>
