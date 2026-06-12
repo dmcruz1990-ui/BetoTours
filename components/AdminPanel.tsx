@@ -861,6 +861,20 @@ const confirmacionWA = (r: Reservation) => {
     `📲 Si tienes alguna pregunta o necesitas ayuda antes de tu llegada, estaremos encantados de atenderte.\n\n` +
     `¡Te esperamos y te deseamos una excelente estadía! ✨\n\nBeto Tours`;
 };
+
+// Mensaje enfocado SOLO en la guía de bienvenida (para enviar al confirmar la reserva)
+const guiaWA = (r: Reservation) => {
+  const nombre = r.guest_name.split(' ')[0];
+  return `¡Hola ${nombre}! 😊\n\n` +
+    `Te compartimos la *Guía de bienvenida* de *Aparta Suites Torre de Prado* by Beto Tours 📖\n\n` +
+    `👉 https://betotours.com/bienvenida.html\n\n` +
+    `Ahí encuentras todo lo que necesitas para tu estadía:\n` +
+    `• WiFi y clave 📶\n` +
+    `• Cómo llegar y check-in 📍\n` +
+    `• Qué hacer en Medellín y tours 🌎\n` +
+    `• Restaurantes y recomendaciones 🍽️\n\n` +
+    `¡Guárdala y cualquier cosa nos escribes! Te esperamos ✨`;
+};
 const waLink = (phone: string | null, text: string) => {
   const p = (phone || '').replace(/\D/g, '');
   if (!p) return '';
@@ -1046,6 +1060,14 @@ const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose
   const phone = (r.guest_phone || '').replace(/\D/g, '');
   const meta = STATUS_META[r.status];
   const setStatus = async (status: ReservationStatus) => { setBusy(true); await supabase.from('reservations').update({ status }).eq('id', r.id); setBusy(false); onChanged(); };
+  // Al confirmar, ofrecer enviar la guía de bienvenida por WhatsApp.
+  const confirmar = async () => {
+    setBusy(true); await supabase.from('reservations').update({ status: 'confirmed' }).eq('id', r.id); setBusy(false);
+    if (phone && confirm('Reserva confirmada ✅\n¿Enviar la guía de bienvenida por WhatsApp ahora?')) {
+      window.open(waLink(r.guest_phone, guiaWA(r)), '_blank');
+    }
+    onChanged();
+  };
   const remove = async () => { if (!confirm(`¿Borrar la reserva de ${r.guest_name}?`)) return; setBusy(true); await supabase.from('reservations').delete().eq('id', r.id); setBusy(false); onChanged(); };
   const Row: React.FC<{ icon: string; label: string; value: React.ReactNode }> = ({ icon, label, value }) => (
     <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
@@ -1089,9 +1111,10 @@ const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose
 
           <div className="flex flex-wrap gap-2 mt-5">
             {phone && <a href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>Enviar confirmación</a>}
+            {phone && <a href={waLink(r.guest_phone, guiaWA(r))} target="_blank" rel="noopener noreferrer" className={`px-4 py-2.5 rounded-xl font-bold text-sm ${r.status === 'confirmed' ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}><i className="fa-solid fa-book-open mr-1.5"></i>Enviar guía</a>}
             <button onClick={() => generarPDF(r)} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700"><i className="fa-solid fa-file-pdf mr-1.5"></i>PDF</button>
             {phone && <a href={waLink(r.guest_phone, `¡Hola ${r.guest_name.split(' ')[0]}! 😊 Para agilizar tu check-in, por favor completa tu registro de huésped en este enlace (es rápido y obligatorio por ley):\n\nhttps://betotours.com/registro.html?rid=${r.id}&n=${encodeURIComponent(r.guest_name)}\n\n¡Gracias! Aparta Suites Torre de Prado · Beto Tours`)} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"><i className="fa-solid fa-id-card mr-1.5"></i>Registro</a>}
-            {(r.source === 'manual' || r.source === 'web') && r.status !== 'confirmed' && <button disabled={busy} onClick={() => setStatus('confirmed')} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
+            {(r.source === 'manual' || r.source === 'web') && r.status !== 'confirmed' && <button disabled={busy} onClick={confirmar} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
             {r.status !== 'cancelled' && <button disabled={busy} onClick={() => setStatus('cancelled')} className="px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-sm hover:bg-amber-100 disabled:opacity-50"><i className="fa-solid fa-ban mr-1.5"></i>Cancelar</button>}
             {onEdit && <button onClick={onEdit} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200"><i className="fa-solid fa-pen mr-1.5"></i>Editar</button>}
             <button disabled={busy} onClick={remove} className="px-4 py-2.5 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-100 disabled:opacity-50"><i className="fa-solid fa-trash"></i></button>
