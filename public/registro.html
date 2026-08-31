@@ -83,8 +83,18 @@
     <div id="vehBox" style="display:none">
       <label>Foto de la matrícula / tarjeta de propiedad</label>
       <label class="file"><span id="matriLbl">📷 Tomar / subir foto de la matrícula</span><img id="matriPrev"><input type="file" accept="image/*" capture="environment" id="matriInput" style="display:none" onchange="onMatricula(this)"></label>
-      <label>Placa *</label><input id="placa" placeholder="Ej: ABC123" style="text-transform:uppercase">
-      <label class="chk"><input type="checkbox" id="vehDecl"> Declaro que el vehículo es de mi propiedad o está bajo mi responsabilidad, y acepto las condiciones de parqueadero y seguridad (sujeto a disponibilidad · Carro $17.000/noche · Moto $8.000/noche). *</label>
+      <div class="row">
+        <div><label>Placa *</label><input id="placa" placeholder="Ej: ABC123" style="text-transform:uppercase"></div>
+        <div><label>Relación con el vehículo</label><select id="vehRelacion"><option value="Propietario">Propietario</option><option value="Autorizado">Autorizado</option><option value="Otro">Otro</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>Marca / línea</label><input id="vehMarca" placeholder="Ej: Mazda 3"></div>
+        <div><label>Modelo (año)</label><input id="vehModelo" placeholder="Ej: 2020"></div>
+      </div>
+      <label>Color</label><input id="vehColor" placeholder="Ej: Gris">
+      <label>Foto de la placa (opcional)</label>
+      <label class="file"><span id="placaFotoLbl">📷 Tomar / subir foto de la placa</span><img id="placaFotoPrev"><input type="file" accept="image/*" capture="environment" id="placaFotoInput" style="display:none" onchange="onPlacaFoto(this)"></label>
+      <label class="chk"><input type="checkbox" id="vehDecl"> Declaro bajo mi responsabilidad que el vehículo es de procedencia lícita y que cuento con derecho o autorización legítima para su tenencia y uso; que no está reportado como hurtado ni conozco adulteración de sus sistemas de identificación. Me comprometo a no usar el parqueadero ni el vehículo para actividades ilícitas. Autorizo a Aparta Suites Torre de Prado a registrar y conservar los datos y fotos del vehículo (placa y matrícula) para control de ingreso/salida y seguridad. *</label>
     </div>
 
     <div class="sec">3️⃣ Firma del huésped</div>
@@ -167,7 +177,7 @@
   }
 
   let frontFile=null; // foto del documento del titular (del botón de arriba o de la sección 2)
-  let selfieFile=null, matriculaFile=null;
+  let selfieFile=null, matriculaFile=null, placaFotoFile=null;
   function fillTitular(r){ const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; }; set('nombre',r.nombre); set('docNumber',r.doc); set('nationality',r.nac); }
 
   // Selfie del titular
@@ -189,6 +199,7 @@
     catch(e){ try{ const T=await loadTess(); const {data}=await T.recognize(f,'eng'); const pl=parsePlaca(data.text||''); const el=document.getElementById('placa'); if(pl && !el.value) el.value=pl; }catch(e2){} }
     lbl.textContent='✓ Foto lista';
   }
+  function onPlacaFoto(input){ const f=input.files[0]; if(!f) return; placaFotoFile=f; prev(input,'placaFotoPrev','placaFotoLbl'); }
 
   async function onCargaDoc(input){
     const f=input.files[0]; if(!f) return;
@@ -285,6 +296,7 @@
       const back=document.getElementById('docBack').files[0]?await subir(document.getElementById('docBack').files[0],'back'):null;
       const selfieUrl=await subir(selfieFile,'selfie');
       const matriculaUrl=matriculaFile?await subir(matriculaFile,'matricula'):null;
+      const placaFotoUrl=placaFotoFile?await subir(placaFotoFile,'placa'):null;
       for(const c of companions){ c.doc_front = await subir(c._file,'acomp'); if(c._selfie){ c.selfie = await subir(c._selfie,'acselfie'); } delete c._file; delete c._selfie; }
       let ip=''; try{ ip=(await (await fetch('https://api.ipify.org?format=json')).json()).ip; }catch(e){}
       const res=await fetch(`${SB_URL}/rest/v1/guest_registrations`,{
@@ -294,7 +306,12 @@
           nationality:g('nationality'), phone:g('phone'), email:g('email')||null, procedencia:g('procedencia')||null,
           acompanantes:nAc, companions:companions, hora_llegada:g('horaLlegada')||null, motivo:document.getElementById('motivo').value||null,
           doc_front:front, doc_back:back, selfie:selfieUrl,
-          vehicle: vehTipo ? { tipo:vehTipo, placa:g('placa').toUpperCase(), matricula_foto:matriculaUrl, declaracion:true } : null,
+          vehicle: vehTipo ? {
+            tipo:vehTipo, placa:g('placa').toUpperCase(),
+            marca:g('vehMarca')||null, modelo:g('vehModelo')||null, color:g('vehColor')||null,
+            relacion:document.getElementById('vehRelacion').value,
+            matricula_foto:matriculaUrl, placa_foto:placaFotoUrl, declaracion:true
+          } : null,
           signature:canvas.toDataURL('image/png'), signed_at:new Date().toISOString(), ip:ip, accepted:true
         })
       });

@@ -3209,6 +3209,62 @@ const contratoPDF = (reg: any) => {
   w.document.write(html); w.document.close();
 };
 
+// PDF con el formato oficial "Registro y declaración de ingreso de vehículo al parqueadero"
+const parqueaderoPDF = (reg: any) => {
+  const v = reg.vehicle || {};
+  const w = window.open('', '_blank', 'width=900,height=900');
+  if (!w) { alert('Permite las ventanas emergentes.'); return; }
+  const cb = (on: boolean) => (on ? '☑' : '☐');
+  const val = (x: any) => (x ? String(x) : '<span style="color:#94a3b8">_______________</span>');
+  const registrado = reg.signed_at ? new Date(reg.signed_at).toLocaleString('es-CO') : '';
+  const fotos = [
+    v.matricula_foto ? `<div><img src="${v.matricula_foto}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:6px"><div style="font-size:9px;color:#64748b;text-align:center">Matrícula / tarjeta de propiedad</div></div>` : '',
+    v.placa_foto ? `<div><img src="${v.placa_foto}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:6px"><div style="font-size:9px;color:#64748b;text-align:center">Placa</div></div>` : '',
+  ].filter(Boolean).join('');
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Registro vehículo ${reg.nombre || ''}</title>
+  <style>*{font-family:Arial,sans-serif}body{margin:0;padding:26px;color:#1e293b;font-size:12px;line-height:1.4}
+  h1{font-size:18px;text-align:center;margin:0}h2{font-size:12px;text-align:center;margin:2px 0 14px;font-weight:bold}
+  .sec{font-weight:bold;font-size:12px;margin:14px 0 4px}
+  table{width:100%;border-collapse:collapse}td{border:1px solid #334155;padding:8px;vertical-align:top}
+  .p{margin:6px 0;text-align:justify}
+  .firma{border:1px solid #334155;padding:10px;height:64px;vertical-align:bottom}
+  .btn{background:#16a34a;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:bold;cursor:pointer}
+  @media print{.no-print{display:none}}</style></head><body>
+  <div class="no-print" style="text-align:right;margin-bottom:10px"><button class="btn" onclick="window.print()">⬇️ Descargar / Imprimir PDF</button></div>
+  <h1>APARTA SUITES TORRE DE PRADO</h1>
+  <h2>REGISTRO Y DECLARACIÓN DE INGRESO DE VEHÍCULO AL PARQUEADERO</h2>
+  <table>
+    <tr><td>Fecha de ingreso: _________ Hora: ______</td><td>Fecha de salida: _________ Hora: ______</td></tr>
+    <tr><td>Tipo: ${cb(v.tipo === 'Carro')} Automóvil ${cb(v.tipo === 'Moto')} Motocicleta</td><td>Placa: <b>${val(v.placa)}</b></td></tr>
+    <tr><td>Marca / línea: ${val(v.marca)}</td><td>Modelo: ${val(v.modelo)}&nbsp;&nbsp;Color: ${val(v.color)}</td></tr>
+    <tr><td>Huésped: ${val(reg.nombre)}</td><td>Documento: ${val(reg.doc_number)}</td></tr>
+    <tr><td>Habitación: _________ Teléfono: ${val(reg.phone)}</td><td>Relación: ${cb(v.relacion === 'Propietario')} Propietario ${cb(v.relacion === 'Autorizado')} Autorizado ${cb(v.relacion === 'Otro')} Otro</td></tr>
+  </table>
+  <div class="sec">DECLARACIÓN DEL HUÉSPED</div>
+  <div class="p">Yo, identificado(a) anteriormente, declaro bajo mi responsabilidad que el vehículo registrado es de procedencia lícita y que cuento con derecho o autorización legítima para su tenencia y uso. Manifiesto que, según mi conocimiento, no se encuentra reportado como hurtado, ni conozco de adulteración de sus sistemas de identificación, ni de una medida que impida su legítima circulación o permanencia. Me comprometo a no utilizar el parqueadero ni el vehículo para actividades ilícitas, fraudulentas o contrarias a la ley. La información suministrada es verdadera y asumo la responsabilidad legal que corresponda por cualquier falsedad, omisión o irregularidad relacionada con el vehículo. El establecimiento podrá informar a las autoridades competentes cuando exista un requerimiento legal o una situación que lo amerite.</div>
+  <div class="sec">VERIFICACIÓN Y REGISTRO</div>
+  <table>
+    <tr><td>${cb(false)} Se verificó placa visible y legible</td><td>${cb(false)} Se verificó documento/licencia de tránsito</td></tr>
+    <tr><td>${cb(!!v.placa_foto)} Foto de placa tomada / anexada</td><td>${cb(!!v.matricula_foto)} Copia/foto de matrícula anexada al registro</td></tr>
+  </table>
+  <div class="sec">AUTORIZACIÓN DE REGISTRO DE DATOS</div>
+  <div class="p">Autorizo a APARTA SUITES TORRE DE PRADO a registrar y conservar los datos necesarios del huésped y del vehículo, incluidas fotografías de la placa y copia de la matrícula/licencia de tránsito, exclusivamente para identificación, control de ingreso y salida, seguridad y atención de requerimientos de autoridades, conforme a la normativa aplicable sobre protección de datos personales.</div>
+  <table>
+    <tr>
+      <td class="firma">Firma del huésped<br>${reg.signature ? `<img src="${reg.signature}" style="max-height:44px">` : ''}</td>
+      <td class="firma">Firma recepción / responsable</td>
+    </tr>
+    <tr>
+      <td>Nombre: ${val(reg.nombre)}<br>C.C.: ${val(reg.doc_number)}</td>
+      <td>Nombre: _______________________<br>Fecha/hora de registro: ${registrado || '_______________'}</td>
+    </tr>
+  </table>
+  ${fotos ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">${fotos}</div>` : ''}
+  <p style="font-size:10px;color:#64748b;margin-top:12px">Nota interna: Adjuntar al presente formato la copia/fotografía de la matrícula o licencia de tránsito y conservarla junto con la reserva correspondiente.</p>
+  </body></html>`;
+  w.document.write(html); w.document.close();
+};
+
 const Checkins: React.FC = () => {
   const [regs, setRegs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3274,7 +3330,9 @@ const Checkins: React.FC = () => {
               <p><b className="text-gray-400">Acompañantes:</b> {detail.acompanantes ?? '—'} · <b className="text-gray-400">Llegada:</b> {detail.hora_llegada || '—'}</p>
               <p><b className="text-gray-400">Procedencia:</b> {detail.procedencia || '—'} · <b className="text-gray-400">Motivo:</b> {detail.motivo || '—'}</p>
               {detail.vehicle && detail.vehicle.tipo && (
-                <p><b className="text-gray-400">Vehículo:</b> {detail.vehicle.tipo === 'Moto' ? '🏍️' : '🚗'} {detail.vehicle.tipo} · Placa <b>{detail.vehicle.placa || '—'}</b></p>
+                <p><b className="text-gray-400">Vehículo:</b> {detail.vehicle.tipo === 'Moto' ? '🏍️' : '🚗'} {detail.vehicle.tipo} · Placa <b>{detail.vehicle.placa || '—'}</b>
+                  {(detail.vehicle.marca || detail.vehicle.modelo || detail.vehicle.color) ? ` · ${[detail.vehicle.marca, detail.vehicle.modelo, detail.vehicle.color].filter(Boolean).join(' ')}` : ''}
+                  {detail.vehicle.relacion ? ` · ${detail.vehicle.relacion}` : ''}</p>
               )}
               {Array.isArray(detail.companions) && detail.companions.length > 0 && (
                 <div><b className="text-gray-400">Acompañantes:</b>
@@ -3297,6 +3355,7 @@ const Checkins: React.FC = () => {
             </div>
             {detail.signature && <div className="mt-3"><p className="text-[11px] text-gray-400 font-bold mb-1">Firma:</p><img src={detail.signature} className="border border-gray-100 rounded-lg max-h-24" /></div>}
             <button onClick={() => contratoPDF(detail)} className="w-full mt-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700"><i className="fa-solid fa-file-pdf mr-1.5"></i>Descargar contrato firmado (PDF)</button>
+            {detail.vehicle && detail.vehicle.tipo && <button onClick={() => parqueaderoPDF(detail)} className="w-full mt-2 py-3 bg-slate-700 text-white rounded-xl font-bold hover:bg-slate-800"><i className="fa-solid fa-car mr-1.5"></i>Registro de vehículo / parqueadero (PDF)</button>}
           </div>
         </div>
       )}
