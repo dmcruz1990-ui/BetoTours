@@ -69,6 +69,24 @@
     <label>Reverso (si aplica)</label>
     <label class="file"><span id="backLbl">📷 Tomar / subir foto (reverso)</span><img id="backPrev"><input type="file" accept="image/*" capture="environment" id="docBack" style="display:none" onchange="prev(this,'backPrev','backLbl')"></label>
 
+    <div class="sec">🤳 Selfie del huésped</div>
+    <p style="font-size:12px;color:#64748b;margin:4px 0">Tómate una selfie para verificar tu identidad. *</p>
+    <label class="file"><span id="selfieLbl">🤳 Tomar selfie</span><img id="selfiePrev"><input type="file" accept="image/*" capture="user" id="selfieInput" style="display:none" onchange="onSelfie(this)"></label>
+
+    <div class="sec">🚗 Vehículo <span style="font-weight:600;color:#94a3b8">(opcional)</span></div>
+    <label>¿Ingresas con vehículo al parqueadero?</label>
+    <select id="vehTipo" onchange="toggleVeh()">
+      <option value="">No, sin vehículo</option>
+      <option value="Carro">🚗 Carro</option>
+      <option value="Moto">🏍️ Moto</option>
+    </select>
+    <div id="vehBox" style="display:none">
+      <label>Foto de la matrícula / tarjeta de propiedad</label>
+      <label class="file"><span id="matriLbl">📷 Tomar / subir foto de la matrícula</span><img id="matriPrev"><input type="file" accept="image/*" capture="environment" id="matriInput" style="display:none" onchange="onMatricula(this)"></label>
+      <label>Placa *</label><input id="placa" placeholder="Ej: ABC123" style="text-transform:uppercase">
+      <label class="chk"><input type="checkbox" id="vehDecl"> Declaro que el vehículo es de mi propiedad o está bajo mi responsabilidad, y acepto las condiciones de parqueadero y seguridad (sujeto a disponibilidad · Carro $17.000/noche · Moto $8.000/noche). *</label>
+    </div>
+
     <div class="sec">3️⃣ Firma del huésped</div>
     <p style="font-size:12px;color:#64748b;margin:4px 0">Firma con el dedo dentro del recuadro:</p>
     <canvas id="firma"></canvas>
@@ -149,7 +167,28 @@
   }
 
   let frontFile=null; // foto del documento del titular (del botón de arriba o de la sección 2)
+  let selfieFile=null, matriculaFile=null;
   function fillTitular(r){ const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; }; set('nombre',r.nombre); set('docNumber',r.doc); set('nationality',r.nac); }
+
+  // Selfie del titular
+  function onSelfie(input){ const f=input.files[0]; if(!f) return; selfieFile=f; prev(input,'selfiePrev','selfieLbl'); document.getElementById('selfieLbl').textContent='✓ Selfie lista'; }
+
+  // Vehículo (opcional): mostrar/ocultar y OCR de la matrícula para arrastrar la placa
+  function toggleVeh(){ document.getElementById('vehBox').style.display = document.getElementById('vehTipo').value ? 'block' : 'none'; }
+  function parsePlaca(text){
+    const up=(text||'').toUpperCase().replace(/[^A-Z0-9]/g,' ');
+    // Carro: ABC123 · Moto: ABC12D / ABC12 (con o sin espacio)
+    const m = up.match(/\b([A-Z]{3})\s?(\d{2,3}[A-Z]?)\b/);
+    return m ? (m[1]+m[2]) : '';
+  }
+  async function onMatricula(input){
+    const f=input.files[0]; if(!f) return; matriculaFile=f;
+    prev(input,'matriPrev','matriLbl');
+    const lbl=document.getElementById('matriLbl'); lbl.textContent='🔎 Leyendo matrícula…';
+    try{ const txt=await ocrCloud(f); const pl=parsePlaca(txt); const el=document.getElementById('placa'); if(pl && !el.value) el.value=pl; }
+    catch(e){ try{ const T=await loadTess(); const {data}=await T.recognize(f,'eng'); const pl=parsePlaca(data.text||''); const el=document.getElementById('placa'); if(pl && !el.value) el.value=pl; }catch(e2){} }
+    lbl.textContent='✓ Foto lista';
+  }
 
   async function onCargaDoc(input){
     const f=input.files[0]; if(!f) return;
@@ -189,6 +228,7 @@
         </div>
         <input id="ac_nac_${i}" placeholder="Nacionalidad *" style="margin-top:6px">
         <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" capture="environment" id="ac_foto_${i}" style="display:none" onchange="onAcomp(this,${i})"></label>
+        <label class="file" style="margin-top:6px"><span id="ac_selfie_lbl_${i}">🤳 Selfie del acompañante (opcional)</span><img id="ac_selfie_prev_${i}"><input type="file" accept="image/*" capture="user" id="ac_selfie_${i}" style="display:none" onchange="prev(this,'ac_selfie_prev_${i}','ac_selfie_lbl_${i}')"></label>
       </div>`;
     }
     c.innerHTML = html;
@@ -218,6 +258,12 @@
     const msg=document.getElementById('msg');
     if(!g('nombre')||!g('docNumber')||!g('nationality')||!g('phone')){ msg.style.color='#dc2626'; msg.textContent='Completa los campos obligatorios (*).'; return; }
     if(!frontFile){ msg.style.color='#dc2626'; msg.textContent='Carga la foto de tu documento (botón "Carga tu documento" o sección 2).'; return; }
+    if(!selfieFile){ msg.style.color='#dc2626'; msg.textContent='Tómate la selfie (sección "Selfie del huésped").'; return; }
+    const vehTipo=document.getElementById('vehTipo').value;
+    if(vehTipo){
+      if(!g('placa')){ msg.style.color='#dc2626'; msg.textContent='Escribe la placa del vehículo.'; return; }
+      if(!document.getElementById('vehDecl').checked){ msg.style.color='#dc2626'; msg.textContent='Acepta la declaración del vehículo.'; return; }
+    }
     if(!firmado){ msg.style.color='#dc2626'; msg.textContent='Por favor firma en el recuadro.'; return; }
     if(!document.getElementById('accept').checked){ msg.style.color='#dc2626'; msg.textContent='Debes aceptar la autorización de datos.'; return; }
     // Recoger acompañantes
@@ -230,13 +276,16 @@
       if(!nom||!dn){ msg.style.color='#dc2626'; msg.textContent=`Completa el nombre y documento del acompañante ${i+1}.`; return; }
       const f=document.getElementById('ac_foto_'+i)?.files[0];
       if(!f){ msg.style.color='#dc2626'; msg.textContent=`Sube la foto del documento del acompañante ${i+1}.`; return; }
-      companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn, nationality:nac, _file:f });
+      const sf=document.getElementById('ac_selfie_'+i)?.files[0]||null;
+      companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn, nationality:nac, _file:f, _selfie:sf });
     }
     const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='#15803d'; msg.textContent='Subiendo documentos…';
     try{
       const front=await subir(frontFile,'front');
       const back=document.getElementById('docBack').files[0]?await subir(document.getElementById('docBack').files[0],'back'):null;
-      for(const c of companions){ c.doc_front = await subir(c._file,'acomp'); delete c._file; }
+      const selfieUrl=await subir(selfieFile,'selfie');
+      const matriculaUrl=matriculaFile?await subir(matriculaFile,'matricula'):null;
+      for(const c of companions){ c.doc_front = await subir(c._file,'acomp'); if(c._selfie){ c.selfie = await subir(c._selfie,'acselfie'); } delete c._file; delete c._selfie; }
       let ip=''; try{ ip=(await (await fetch('https://api.ipify.org?format=json')).json()).ip; }catch(e){}
       const res=await fetch(`${SB_URL}/rest/v1/guest_registrations`,{
         method:'POST', headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json',Prefer:'return=minimal'},
@@ -244,7 +293,9 @@
           reservation_id:rid||null, nombre:g('nombre'), doc_type:document.getElementById('docType').value, doc_number:g('docNumber'),
           nationality:g('nationality'), phone:g('phone'), email:g('email')||null, procedencia:g('procedencia')||null,
           acompanantes:nAc, companions:companions, hora_llegada:g('horaLlegada')||null, motivo:document.getElementById('motivo').value||null,
-          doc_front:front, doc_back:back, signature:canvas.toDataURL('image/png'), signed_at:new Date().toISOString(), ip:ip, accepted:true
+          doc_front:front, doc_back:back, selfie:selfieUrl,
+          vehicle: vehTipo ? { tipo:vehTipo, placa:g('placa').toUpperCase(), matricula_foto:matriculaUrl, declaracion:true } : null,
+          signature:canvas.toDataURL('image/png'), signed_at:new Date().toISOString(), ip:ip, accepted:true
         })
       });
       if(!res.ok) throw new Error(await res.text());
