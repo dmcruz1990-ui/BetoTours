@@ -3196,11 +3196,13 @@ const contratoPDF = (reg: any) => {
     <tr><td class="l">Teléfono / Correo</td><td>${reg.phone || ''} ${reg.email ? '· ' + reg.email : ''}</td></tr>
     <tr><td class="l">Acompañantes</td><td>${reg.acompanantes ?? ''}</td></tr>
     <tr><td class="l">Procedencia / Motivo</td><td>${reg.procedencia || ''} ${reg.motivo ? '· ' + reg.motivo : ''}</td></tr>
+    ${reg.vehicle && reg.vehicle.tipo ? `<tr><td class="l">Vehículo</td><td>${reg.vehicle.tipo} · Placa ${reg.vehicle.placa || ''}</td></tr>` : ''}
     ${Array.isArray(reg.companions) && reg.companions.length ? `<tr><td class="l">Acompañantes</td><td>${reg.companions.map((c: any) => `${c.nombre} (${c.doc_type || ''} ${c.doc_number || ''}${c.nationality ? ' · ' + c.nationality : ''})`).join('<br>')}</td></tr>` : ''}
   </table>
   <div style="margin-top:8px">${clausulas}</div>
   <div class="firma">
     <div>${reg.signature ? `<img src="${reg.signature}">` : ''}<div style="border-top:1px solid #1e293b;margin-top:4px;padding-top:3px;font-size:11px">Firma del huésped</div></div>
+    ${reg.selfie ? `<div><img src="${reg.selfie}" style="border:1px solid #e2e8f0;border-radius:8px;max-height:90px"><div style="text-align:center;font-size:10px;color:#64748b;margin-top:3px">Selfie</div></div>` : ''}
     <div style="font-size:10px;color:#64748b">Aceptado electrónicamente${firmado ? ' el ' + firmado : ''}${reg.ip ? ' · IP ' + reg.ip : ''}.<br>La firma digital tiene la misma validez que una manuscrita (cláusula 15).</div>
   </div>
   </body></html>`;
@@ -3246,8 +3248,10 @@ const Checkins: React.FC = () => {
                 <p className="text-sm text-gray-500">{r.doc_type} {r.doc_number} · {r.nationality} · <i className="fa-solid fa-phone mr-1"></i>{r.phone}</p>
                 <p className="text-xs text-gray-400">{new Date(r.created_at).toLocaleString('es-CO')}{r.acompanantes ? ` · ${r.acompanantes} acomp.` : ''}{r.hora_llegada ? ` · llega ${r.hora_llegada}` : ''}</p>
               </div>
-              <div className="flex gap-2 flex-shrink-0">
-                {r.signature && <span title="Firmado" className="px-2 py-2 text-green-600"><i className="fa-solid fa-signature"></i></span>}
+              <div className="flex gap-2 flex-shrink-0 items-center">
+                {r.vehicle?.tipo && <span title={`${r.vehicle.tipo} · ${r.vehicle.placa || ''}`} className="text-gray-400"><i className={`fa-solid ${r.vehicle.tipo === 'Moto' ? 'fa-motorcycle' : 'fa-car'}`}></i></span>}
+                {r.selfie && <span title="Con selfie" className="text-gray-300"><i className="fa-solid fa-camera"></i></span>}
+                {r.signature && <span title="Firmado" className="px-1 py-2 text-green-600"><i className="fa-solid fa-signature"></i></span>}
                 <button onClick={() => setDetail(r)} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-bold"><i className="fa-solid fa-eye"></i></button>
                 <button onClick={() => contratoPDF(r)} className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold"><i className="fa-solid fa-file-pdf mr-1"></i>Contrato</button>
               </div>
@@ -3269,11 +3273,15 @@ const Checkins: React.FC = () => {
               <p><b className="text-gray-400">Teléfono:</b> {detail.phone}{detail.email ? ` · ${detail.email}` : ''}</p>
               <p><b className="text-gray-400">Acompañantes:</b> {detail.acompanantes ?? '—'} · <b className="text-gray-400">Llegada:</b> {detail.hora_llegada || '—'}</p>
               <p><b className="text-gray-400">Procedencia:</b> {detail.procedencia || '—'} · <b className="text-gray-400">Motivo:</b> {detail.motivo || '—'}</p>
+              {detail.vehicle && detail.vehicle.tipo && (
+                <p><b className="text-gray-400">Vehículo:</b> {detail.vehicle.tipo === 'Moto' ? '🏍️' : '🚗'} {detail.vehicle.tipo} · Placa <b>{detail.vehicle.placa || '—'}</b></p>
+              )}
               {Array.isArray(detail.companions) && detail.companions.length > 0 && (
                 <div><b className="text-gray-400">Acompañantes:</b>
                   <ul className="ml-1 mt-1 space-y-1">{detail.companions.map((c: any, i: number) => (
                     <li key={i} className="flex items-center gap-2">
                       {c.doc_front ? <a href={c.doc_front} target="_blank" rel="noopener noreferrer"><img src={c.doc_front} className="w-9 h-9 object-cover rounded border border-gray-100" /></a> : <span className="w-9 h-9 rounded bg-gray-100 flex items-center justify-center text-gray-300"><i className="fa-solid fa-image"></i></span>}
+                      {c.selfie && <a href={c.selfie} target="_blank" rel="noopener noreferrer"><img src={c.selfie} className="w-9 h-9 object-cover rounded-full border border-gray-100" title="Selfie" /></a>}
                       <span>{c.nombre} — {c.doc_type} {c.doc_number}{c.nationality ? ` · ${c.nationality}` : ''}</span>
                     </li>
                   ))}</ul>
@@ -3284,6 +3292,8 @@ const Checkins: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 mt-3">
               {detail.doc_front && <a href={detail.doc_front} target="_blank" rel="noopener noreferrer"><img src={detail.doc_front} className="w-full h-28 object-cover rounded-lg border border-gray-100" /><p className="text-[10px] text-center text-gray-400 mt-1">Documento (frente)</p></a>}
               {detail.doc_back && <a href={detail.doc_back} target="_blank" rel="noopener noreferrer"><img src={detail.doc_back} className="w-full h-28 object-cover rounded-lg border border-gray-100" /><p className="text-[10px] text-center text-gray-400 mt-1">Documento (reverso)</p></a>}
+              {detail.selfie && <a href={detail.selfie} target="_blank" rel="noopener noreferrer"><img src={detail.selfie} className="w-full h-28 object-cover rounded-lg border border-gray-100" /><p className="text-[10px] text-center text-gray-400 mt-1">Selfie del huésped</p></a>}
+              {detail.vehicle && detail.vehicle.matricula_foto && <a href={detail.vehicle.matricula_foto} target="_blank" rel="noopener noreferrer"><img src={detail.vehicle.matricula_foto} className="w-full h-28 object-cover rounded-lg border border-gray-100" /><p className="text-[10px] text-center text-gray-400 mt-1">Matrícula ({detail.vehicle.placa})</p></a>}
             </div>
             {detail.signature && <div className="mt-3"><p className="text-[11px] text-gray-400 font-bold mb-1">Firma:</p><img src={detail.signature} className="border border-gray-100 rounded-lg max-h-24" /></div>}
             <button onClick={() => contratoPDF(detail)} className="w-full mt-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700"><i className="fa-solid fa-file-pdf mr-1.5"></i>Descargar contrato firmado (PDF)</button>
