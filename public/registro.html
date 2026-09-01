@@ -33,9 +33,9 @@
 </head>
 <body>
 <div class="card">
-  <div class="head"><h1>🏨 Web Check-in</h1><p>Aparta Suites Torre de Prado · Beto Tours</p></div>
+  <div class="head"><h1>🏨 Web Check-in</h1><p id="headSub">Aparta Suites Torre de Prado · Beto Tours</p></div>
   <div class="body" id="formArea">
-    <p style="font-size:13px;color:#64748b;margin:0">Completa tu registro antes de llegar. Es rápido, seguro y obligatorio según la ley colombiana.</p>
+    <p id="introText" style="font-size:13px;color:#64748b;margin:0">Completa tu registro antes de llegar. Es rápido, seguro y obligatorio según la ley colombiana.</p>
 
     <div class="sec" style="justify-content:space-between">1️⃣ Datos del huésped
       <label style="background:#16a34a;color:#fff;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
@@ -134,7 +134,12 @@
   const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2b2RteHFlaG95amZraXVscndmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjg3ODksImV4cCI6MjA5NTkwNDc4OX0.OOPmj5K_MP4kjjQshsbNZoBf1WNykLtBHugxl56WYrc";
   const params=new URLSearchParams(location.search);
   const rid=params.get('rid');
-  if(params.get('n')) document.getElementById('nombre').value=params.get('n');
+  const esAdicional = params.get('add')==='1'; // persona que llega después
+  if(!esAdicional && params.get('n')) document.getElementById('nombre').value=params.get('n');
+  if(esAdicional){
+    document.getElementById('headSub').textContent='Registro de persona adicional';
+    document.getElementById('introText').textContent='Registra a la persona que llegó después. Cada huésped hace su propio registro (documento, selfie y firma). Puedes agregar más cuando lleguen.';
+  }
 
   function prev(input,imgId,lblId){ const f=input.files[0]; if(!f)return; const img=document.getElementById(imgId); img.src=URL.createObjectURL(f); img.style.display='block'; document.getElementById(lblId).textContent='✓ Foto lista'; }
 
@@ -316,9 +321,14 @@
         })
       });
       if(!res.ok) throw new Error(await res.text());
-      document.getElementById('formArea').innerHTML='<div class="ok-screen"><div class="check">✓</div><h2 style="margin:0;color:#15803d">¡Check-in completado!</h2><p style="color:#64748b">Gracias. Tu llegada será mucho más rápida. ¡Te esperamos! 🇨🇴</p></div>';
+      document.getElementById('formArea').innerHTML='<div class="ok-screen"><div class="check">✓</div><h2 style="margin:0;color:#15803d">¡Check-in completado!</h2><p style="color:#64748b">Gracias. Tu llegada será mucho más rápida. ¡Te esperamos! 🇨🇴</p>'
+        + (rid ? '<p style="color:#64748b;font-size:13px;margin-top:14px">¿Llegó alguien más de tu grupo? Cada persona hace su propio registro.</p><button class="btn" style="max-width:340px;margin:8px auto 0" onclick="otraPersona()">➕ Registrar otra persona que llegó</button>' : '')
+        + '</div>';
     }catch(e){ msg.style.color='#dc2626'; msg.textContent='No se pudo enviar. Revisa tu conexión e intenta de nuevo.'; btn.disabled=false; btn.textContent='Enviar check-in'; }
   }
+
+  // Abre un formulario nuevo para registrar a otra persona de la misma reserva
+  function otraPersona(){ location.href='registro.html?rid='+encodeURIComponent(rid||'')+'&add=1'; }
 </script>
 </body>
 </html>
