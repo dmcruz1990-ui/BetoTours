@@ -1113,7 +1113,7 @@ const ReservationDetail: React.FC<{ r: Reservation; onEdit?: () => void; onClose
             {phone && <a href={waLink(r.guest_phone, confirmacionWA(r))} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700"><i className="fa-brands fa-whatsapp mr-1.5"></i>Enviar confirmación</a>}
             {phone && <a href={waLink(r.guest_phone, guiaWA(r))} target="_blank" rel="noopener noreferrer" className={`px-4 py-2.5 rounded-xl font-bold text-sm ${r.status === 'confirmed' ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}><i className="fa-solid fa-book-open mr-1.5"></i>Enviar guía</a>}
             <button onClick={() => generarPDF(r)} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700"><i className="fa-solid fa-file-pdf mr-1.5"></i>PDF</button>
-            {phone && <a href={waLink(r.guest_phone, `¡Hola ${r.guest_name.split(' ')[0]}! 😊 Para agilizar tu check-in, por favor completa tu registro de huésped en este enlace (es rápido y obligatorio por ley):\n\nhttps://betotours.com/registro.html?rid=${r.id}&n=${encodeURIComponent(r.guest_name)}\n\n¡Gracias! Aparta Suites Torre de Prado · Beto Tours`)} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"><i className="fa-solid fa-id-card mr-1.5"></i>Registro</a>}
+            {phone && <a href={waLink(r.guest_phone, `¡Hola ${r.guest_name.split(' ')[0]}! 😊 Para agilizar tu check-in, por favor completa tu registro de huésped en este enlace (es rápido y obligatorio por ley):\n\nhttps://betotours.com/registro.html?rid=${r.id}&n=${encodeURIComponent(r.guest_name)}\n\nCada persona de tu grupo hace su propio registro. Si no llegan todos al tiempo, no hay problema: los que falten pueden registrarse después con el mismo enlace. 🙌\n\n¡Gracias! Aparta Suites Torre de Prado · Beto Tours`)} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"><i className="fa-solid fa-id-card mr-1.5"></i>Registro</a>}
             {(r.source === 'manual' || r.source === 'web') && r.status !== 'confirmed' && <button disabled={busy} onClick={confirmar} className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-bold text-sm hover:bg-green-100 disabled:opacity-50"><i className="fa-solid fa-check mr-1.5"></i>Confirmar</button>}
             {r.status !== 'cancelled' && <button disabled={busy} onClick={() => setStatus('cancelled')} className="px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-sm hover:bg-amber-100 disabled:opacity-50"><i className="fa-solid fa-ban mr-1.5"></i>Cancelar</button>}
             {onEdit && <button onClick={onEdit} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200"><i className="fa-solid fa-pen mr-1.5"></i>Editar</button>}
@@ -3282,6 +3282,20 @@ const Checkins: React.FC = () => {
 
   if (loading) return <div className="text-center py-16 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>;
 
+  // Agrupar por reserva: los que se registran después quedan bajo la misma reserva.
+  const grupos: any[][] = (() => {
+    const byRes: Record<string, any[]> = {};
+    const solos: any[][] = [];
+    regs.forEach(r => {
+      if (r.reservation_id) { (byRes[r.reservation_id] = byRes[r.reservation_id] || []).push(r); }
+      else solos.push([r]);
+    });
+    const arr = Object.values(byRes).map(list => list.slice().sort((a, b) => (a.created_at > b.created_at ? 1 : -1)));
+    solos.forEach(s => arr.push(s));
+    arr.sort((A, B) => (A[A.length - 1].created_at > B[B.length - 1].created_at ? -1 : 1));
+    return arr;
+  })();
+
   return (
     <div>
       {missing ? (
@@ -3297,19 +3311,30 @@ const Checkins: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {regs.map(r => (
-            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="font-black text-gray-900 truncate">{r.nombre}</p>
-                <p className="text-sm text-gray-500">{r.doc_type} {r.doc_number} · {r.nationality} · <i className="fa-solid fa-phone mr-1"></i>{r.phone}</p>
-                <p className="text-xs text-gray-400">{new Date(r.created_at).toLocaleString('es-CO')}{r.acompanantes ? ` · ${r.acompanantes} acomp.` : ''}{r.hora_llegada ? ` · llega ${r.hora_llegada}` : ''}</p>
-              </div>
-              <div className="flex gap-2 flex-shrink-0 items-center">
-                {r.vehicle?.tipo && <span title={`${r.vehicle.tipo} · ${r.vehicle.placa || ''}`} className="text-gray-400"><i className={`fa-solid ${r.vehicle.tipo === 'Moto' ? 'fa-motorcycle' : 'fa-car'}`}></i></span>}
-                {r.selfie && <span title="Con selfie" className="text-gray-300"><i className="fa-solid fa-camera"></i></span>}
-                {r.signature && <span title="Firmado" className="px-1 py-2 text-green-600"><i className="fa-solid fa-signature"></i></span>}
-                <button onClick={() => setDetail(r)} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-bold"><i className="fa-solid fa-eye"></i></button>
-                <button onClick={() => contratoPDF(r)} className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold"><i className="fa-solid fa-file-pdf mr-1"></i>Contrato</button>
+          {grupos.map(grupo => (
+            <div key={grupo[0].id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              {grupo.length > 1 && <p className="text-[11px] font-black text-gray-400 uppercase mb-2"><i className="fa-solid fa-users mr-1.5"></i>{grupo.length} personas registradas en esta reserva</p>}
+              <div className={grupo.length > 1 ? 'divide-y divide-gray-50' : ''}>
+                {grupo.map((r: any, i: number) => (
+                  <div key={r.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <p className="font-black text-gray-900 truncate flex items-center gap-2">{r.nombre}
+                        {grupo.length > 1 && (i === 0
+                          ? <span className="text-[10px] font-bold bg-green-50 text-green-700 px-1.5 py-0.5 rounded">Principal</span>
+                          : <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">Llegó después</span>)}
+                      </p>
+                      <p className="text-sm text-gray-500 truncate">{r.doc_type} {r.doc_number}{r.nationality ? ` · ${r.nationality}` : ''}{r.phone ? <> · <i className="fa-solid fa-phone mr-1"></i>{r.phone}</> : ''}</p>
+                      <p className="text-xs text-gray-400">{new Date(r.created_at).toLocaleString('es-CO')}{r.acompanantes ? ` · ${r.acompanantes} acomp.` : ''}{r.hora_llegada ? ` · llega ${r.hora_llegada}` : ''}</p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0 items-center">
+                      {r.vehicle?.tipo && <span title={`${r.vehicle.tipo} · ${r.vehicle.placa || ''}`} className="text-gray-400"><i className={`fa-solid ${r.vehicle.tipo === 'Moto' ? 'fa-motorcycle' : 'fa-car'}`}></i></span>}
+                      {r.selfie && <span title="Con selfie" className="text-gray-300"><i className="fa-solid fa-camera"></i></span>}
+                      {r.signature && <span title="Firmado" className="px-1 text-green-600"><i className="fa-solid fa-signature"></i></span>}
+                      <button onClick={() => setDetail(r)} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-bold"><i className="fa-solid fa-eye"></i></button>
+                      <button onClick={() => contratoPDF(r)} className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold"><i className="fa-solid fa-file-pdf mr-1"></i>Contrato</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
