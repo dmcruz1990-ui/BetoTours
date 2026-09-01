@@ -40,7 +40,7 @@
     <div class="sec" style="justify-content:space-between">1️⃣ Datos del huésped
       <label style="background:#16a34a;color:#fff;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
         <span id="cargaLbl">📷 Carga tu documento</span>
-        <input type="file" accept="image/*" capture="environment" id="cargaDoc" style="display:none" onchange="onCargaDoc(this)">
+        <input type="file" accept="image/*" id="cargaDoc" style="display:none" onchange="onCargaDoc(this)">
       </label>
     </div>
     <label>Nombre completo *</label><input id="nombre" placeholder="Nombre y apellidos">
@@ -65,13 +65,13 @@
 
     <div class="sec">2️⃣ Foto del documento</div>
     <label>Frente del documento *</label>
-    <label class="file"><span id="frontLbl">📷 Tomar / subir foto (frente)</span><img id="frontPrev"><input type="file" accept="image/*" capture="environment" id="docFront" style="display:none" onchange="onDoc(this)"></label>
+    <label class="file"><span id="frontLbl">📷 Tomar / subir foto (frente)</span><img id="frontPrev"><input type="file" accept="image/*" id="docFront" style="display:none" onchange="onDoc(this)"></label>
     <label>Reverso (si aplica)</label>
-    <label class="file"><span id="backLbl">📷 Tomar / subir foto (reverso)</span><img id="backPrev"><input type="file" accept="image/*" capture="environment" id="docBack" style="display:none" onchange="prev(this,'backPrev','backLbl')"></label>
+    <label class="file"><span id="backLbl">📷 Tomar / subir foto (reverso)</span><img id="backPrev"><input type="file" accept="image/*" id="docBack" style="display:none" onchange="prev(this,'backPrev','backLbl')"></label>
 
     <div class="sec">🤳 Selfie del huésped</div>
     <p style="font-size:12px;color:#64748b;margin:4px 0">Tómate una selfie para verificar tu identidad. *</p>
-    <label class="file"><span id="selfieLbl">🤳 Tomar selfie</span><img id="selfiePrev"><input type="file" accept="image/*" capture="user" id="selfieInput" style="display:none" onchange="onSelfie(this)"></label>
+    <label class="file"><span id="selfieLbl">🤳 Tomar o subir selfie</span><img id="selfiePrev"><input type="file" accept="image/*" id="selfieInput" style="display:none" onchange="onSelfie(this)"></label>
 
     <div class="sec">🚗 Vehículo <span style="font-weight:600;color:#94a3b8">(opcional)</span></div>
     <label>¿Ingresas con vehículo al parqueadero?</label>
@@ -82,7 +82,7 @@
     </select>
     <div id="vehBox" style="display:none">
       <label>Foto de la matrícula / tarjeta de propiedad</label>
-      <label class="file"><span id="matriLbl">📷 Tomar / subir foto de la matrícula</span><img id="matriPrev"><input type="file" accept="image/*" capture="environment" id="matriInput" style="display:none" onchange="onMatricula(this)"></label>
+      <label class="file"><span id="matriLbl">📷 Tomar / subir foto de la matrícula</span><img id="matriPrev"><input type="file" accept="image/*" id="matriInput" style="display:none" onchange="onMatricula(this)"></label>
       <div class="row">
         <div><label>Placa *</label><input id="placa" placeholder="Ej: ABC123" style="text-transform:uppercase"></div>
         <div><label>Relación con el vehículo</label><select id="vehRelacion"><option value="Propietario">Propietario</option><option value="Autorizado">Autorizado</option><option value="Otro">Otro</option></select></div>
@@ -93,7 +93,7 @@
       </div>
       <label>Color</label><input id="vehColor" placeholder="Ej: Gris">
       <label>Foto de la placa (opcional)</label>
-      <label class="file"><span id="placaFotoLbl">📷 Tomar / subir foto de la placa</span><img id="placaFotoPrev"><input type="file" accept="image/*" capture="environment" id="placaFotoInput" style="display:none" onchange="onPlacaFoto(this)"></label>
+      <label class="file"><span id="placaFotoLbl">📷 Tomar / subir foto de la placa</span><img id="placaFotoPrev"><input type="file" accept="image/*" id="placaFotoInput" style="display:none" onchange="onPlacaFoto(this)"></label>
       <label class="chk"><input type="checkbox" id="vehDecl"> Declaro bajo mi responsabilidad que el vehículo es de procedencia lícita y que cuento con derecho o autorización legítima para su tenencia y uso; que no está reportado como hurtado ni conozco adulteración de sus sistemas de identificación. Me comprometo a no usar el parqueadero ni el vehículo para actividades ilícitas. Autorizo a Aparta Suites Torre de Prado a registrar y conservar los datos y fotos del vehículo (placa y matrícula) para control de ingreso/salida y seguridad. *</label>
     </div>
 
@@ -243,8 +243,8 @@
           <div><input id="ac_dn_${i}" placeholder="N° documento *"></div>
         </div>
         <input id="ac_nac_${i}" placeholder="Nacionalidad *" style="margin-top:6px">
-        <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" capture="environment" id="ac_foto_${i}" style="display:none" onchange="onAcomp(this,${i})"></label>
-        <label class="file" style="margin-top:6px"><span id="ac_selfie_lbl_${i}">🤳 Selfie del acompañante (opcional)</span><img id="ac_selfie_prev_${i}"><input type="file" accept="image/*" capture="user" id="ac_selfie_${i}" style="display:none" onchange="prev(this,'ac_selfie_prev_${i}','ac_selfie_lbl_${i}')"></label>
+        <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" id="ac_foto_${i}" style="display:none" onchange="onAcomp(this,${i})"></label>
+        <label class="file" style="margin-top:6px"><span id="ac_selfie_lbl_${i}">🤳 Selfie del acompañante (opcional)</span><img id="ac_selfie_prev_${i}"><input type="file" accept="image/*" id="ac_selfie_${i}" style="display:none" onchange="prev(this,'ac_selfie_prev_${i}','ac_selfie_lbl_${i}')"></label>
       </div>`;
     }
     c.innerHTML = html;
