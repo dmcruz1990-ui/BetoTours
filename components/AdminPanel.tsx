@@ -77,10 +77,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
 
   // ---------- PANEL ----------
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-5 md:py-10">
+      <div className="flex items-center justify-between mb-4 md:mb-8 flex-wrap gap-3 md:gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900">Panel de administración</h1>
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900">Panel de administración</h1>
           <p className="text-gray-500 text-sm">{session?.user.email}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -91,40 +91,43 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
         </div>
       </div>
 
-      <div className="flex gap-2 mb-8 flex-wrap">
-        <button onClick={() => setTab('inicio')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'inicio' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+      {/* Pestañas: en tablet/celular es una barra fija arriba con scroll horizontal; en pantalla grande se acomodan en varias filas */}
+      <div className="sticky top-0 z-30 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 mb-5 bg-gray-50/95 backdrop-blur border-b border-gray-100 md:static md:mx-0 md:px-0 md:py-0 md:mb-8 md:bg-transparent md:border-0">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar md:overflow-visible md:flex-wrap">
+        <button onClick={() => setTab('inicio')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='inicio' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-house mr-2"></i>Inicio
         </button>
-        <button onClick={() => setTab('board')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'board' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('board')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='board' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-table-columns mr-2"></i>Calendario general
         </button>
-        <button onClick={() => setTab('reservas')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'reservas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('reservas')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='reservas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-bell-concierge mr-2"></i>Reservas
         </button>
-        <button onClick={() => setTab('rooms')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'rooms' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('rooms')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='rooms' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-calendar-days mr-2"></i>Por habitación
         </button>
-        <button onClick={() => setTab('apartments')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'apartments' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('apartments')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='apartments' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-building mr-2"></i>Apartamentos
         </button>
-        <button onClick={() => setTab('cotizador')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'cotizador' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('cotizador')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='cotizador' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-file-invoice-dollar mr-2"></i>Cotizador
         </button>
-        <button onClick={() => setTab('avail')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('avail')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='avail' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-toggle-on mr-2"></i>Disponibilidad
         </button>
-        <button onClick={() => setTab('conta')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'conta' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('conta')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='conta' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-chart-line mr-2"></i>Contabilidad
         </button>
-        <button onClick={() => setTab('checkins')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'checkins' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('checkins')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='checkins' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-id-card mr-2"></i>Check-ins
         </button>
-        <button onClick={() => setTab('guia')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'guia' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('guia')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='guia' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-book-open mr-2"></i>Guía
         </button>
-        <button onClick={() => setTab('blog')} className={`px-5 py-2.5 rounded-full font-bold text-sm transition ${tab === 'blog' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+        <button onClick={() => setTab('blog')} className={`px-4 md:px-5 py-2.5 rounded-full font-bold text-sm transition whitespace-nowrap flex-shrink-0 ${tab ==='blog' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           <i className="fa-solid fa-newspaper mr-2"></i>Blog
         </button>
+      </div>
       </div>
 
       {tab === 'inicio' ? <Dashboard onGoImport={() => setTab('reservas')} /> : tab === 'reservas' ? <ReservationsManager /> : tab === 'board' ? <TimelineBoard /> : tab === 'rooms' ? <RoomsCalendar /> : tab === 'apartments' ? <ApartmentsManager /> : tab === 'cotizador' ? <Cotizador /> : tab === 'avail' ? <AvailabilityManager /> : tab === 'conta' ? <Contabilidad /> : tab === 'checkins' ? <Checkins /> : tab === 'guia' ? <GuestGuide /> : <BlogManager />}
