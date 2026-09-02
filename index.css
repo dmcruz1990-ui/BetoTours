@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos globales (antes estaban inline en index.html) */
+body {
+  font-family: 'Montserrat', sans-serif;
+}
+.font-paisa {
+  font-family: 'Permanent Marker', cursive;
+}
+.paisa-gradient {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #10b981;
+  border-radius: 10px;
+}
+
+/* Barra de pestañas del admin: scroll horizontal en tablet/celular sin mostrar la barra */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}

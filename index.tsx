@@ -1,6 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
+// CSS e íconos empaquetados en el build (no dependen de CDN externos)
+import '@fortawesome/fontawesome-free/css/all.min.css';
+import './index.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
