@@ -17,8 +17,12 @@
   input,select,textarea{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:11px;font:inherit;outline:none}
   input:focus,select:focus{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.2)}
   .row{display:flex;gap:10px}.row>div{flex:1}
-  .file{display:flex;align-items:center;gap:10px;border:1px dashed #cbd5e1;border-radius:11px;padding:10px;font-size:13px;color:#64748b;cursor:pointer}
+  .file{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px dashed #cbd5e1;border-radius:11px;padding:10px;font-size:13px;color:#64748b}
   .file img{width:46px;height:46px;object-fit:cover;border-radius:8px;display:none}
+  /* Dos botones por foto: cámara (abre la cámara sí o sí) y archivo (galería/archivos). Funciona igual en cualquier celular/tablet. */
+  .pick{display:flex;gap:8px;width:100%}
+  .pbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;margin:0;padding:11px 8px;border-radius:9px;font-size:12.5px;font-weight:800;cursor:pointer;border:1px solid #cbd5e1;color:#334155;background:#fff}
+  .pbtn.cam{background:#16a34a;color:#fff;border-color:#16a34a}
   canvas{width:100%;height:170px;border:1px solid #e2e8f0;border-radius:11px;touch-action:none;background:#fff}
   .auth{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:13px;margin-top:14px;font-size:11.5px;color:#475569;max-height:170px;overflow:auto;line-height:1.5}
   .chk{display:flex;align-items:flex-start;gap:10px;margin-top:12px;font-size:13px;font-weight:600}
@@ -38,10 +42,15 @@
     <p id="introText" style="font-size:13px;color:#64748b;margin:0">Completa tu registro antes de llegar. Es rápido, seguro y obligatorio según la ley colombiana.</p>
 
     <div class="sec" style="justify-content:space-between">1️⃣ Datos del huésped
-      <label style="background:#16a34a;color:#fff;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
-        <span id="cargaLbl">📷 Carga tu documento</span>
-        <input type="file" accept="image/*" id="cargaDoc" style="display:none" onchange="onCargaDoc(this)">
-      </label>
+      <span style="display:inline-flex;gap:6px">
+        <label title="Tomar foto con la cámara y leer los datos" style="background:#16a34a;color:#fff;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin:0">
+          <span id="cargaLbl">📷 Escanear documento</span>
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="onCargaDoc(this)">
+        </label>
+        <label title="Subir una foto del documento" style="background:#fff;color:#15803d;border:1px solid #16a34a;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;margin:0">
+          🖼️<input type="file" accept="image/*" style="display:none" onchange="onCargaDoc(this)">
+        </label>
+      </span>
     </div>
     <label>Nombre completo *</label><input id="nombre" placeholder="Nombre y apellidos">
     <div class="row">
@@ -65,13 +74,28 @@
 
     <div class="sec">2️⃣ Foto del documento</div>
     <label>Frente del documento *</label>
-    <label class="file"><span id="frontLbl">📷 Tomar / subir foto (frente)</span><img id="frontPrev"><input type="file" accept="image/*" id="docFront" style="display:none" onchange="onDoc(this)"></label>
+    <div class="file"><span id="frontLbl">Aún sin foto</span><img id="frontPrev">
+      <div class="pick">
+        <label class="pbtn cam">📷 Tomar foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="onDoc(this)"></label>
+        <label class="pbtn">🖼️ Subir archivo<input type="file" accept="image/*" style="display:none" onchange="onDoc(this)"></label>
+      </div>
+    </div>
     <label>Reverso (si aplica)</label>
-    <label class="file"><span id="backLbl">📷 Tomar / subir foto (reverso)</span><img id="backPrev"><input type="file" accept="image/*" id="docBack" style="display:none" onchange="prev(this,'backPrev','backLbl')"></label>
+    <div class="file"><span id="backLbl">Aún sin foto</span><img id="backPrev">
+      <div class="pick">
+        <label class="pbtn cam">📷 Tomar foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="onBack(this)"></label>
+        <label class="pbtn">🖼️ Subir archivo<input type="file" accept="image/*" style="display:none" onchange="onBack(this)"></label>
+      </div>
+    </div>
 
     <div class="sec">🤳 Selfie del huésped</div>
     <p style="font-size:12px;color:#64748b;margin:4px 0">Tómate una selfie para verificar tu identidad. *</p>
-    <label class="file"><span id="selfieLbl">🤳 Tomar o subir selfie</span><img id="selfiePrev"><input type="file" accept="image/*" id="selfieInput" style="display:none" onchange="onSelfie(this)"></label>
+    <div class="file"><span id="selfieLbl">Aún sin selfie</span><img id="selfiePrev">
+      <div class="pick">
+        <label class="pbtn cam">🤳 Tomar selfie<input type="file" accept="image/*" capture="user" style="display:none" onchange="onSelfie(this)"></label>
+        <label class="pbtn">🖼️ Subir archivo<input type="file" accept="image/*" style="display:none" onchange="onSelfie(this)"></label>
+      </div>
+    </div>
 
     <div class="sec">🚗 Vehículo <span style="font-weight:600;color:#94a3b8">(opcional)</span></div>
     <label>¿Ingresas con vehículo al parqueadero?</label>
@@ -82,7 +106,12 @@
     </select>
     <div id="vehBox" style="display:none">
       <label>Foto de la matrícula / tarjeta de propiedad</label>
-      <label class="file"><span id="matriLbl">📷 Tomar / subir foto de la matrícula</span><img id="matriPrev"><input type="file" accept="image/*" id="matriInput" style="display:none" onchange="onMatricula(this)"></label>
+      <div class="file"><span id="matriLbl">Aún sin foto</span><img id="matriPrev">
+        <div class="pick">
+          <label class="pbtn cam">📷 Tomar foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="onMatricula(this)"></label>
+          <label class="pbtn">🖼️ Subir archivo<input type="file" accept="image/*" style="display:none" onchange="onMatricula(this)"></label>
+        </div>
+      </div>
       <div class="row">
         <div><label>Placa *</label><input id="placa" placeholder="Ej: ABC123" style="text-transform:uppercase"></div>
         <div><label>Relación con el vehículo</label><select id="vehRelacion"><option value="Propietario">Propietario</option><option value="Autorizado">Autorizado</option><option value="Otro">Otro</option></select></div>
@@ -93,7 +122,12 @@
       </div>
       <label>Color</label><input id="vehColor" placeholder="Ej: Gris">
       <label>Foto de la placa (opcional)</label>
-      <label class="file"><span id="placaFotoLbl">📷 Tomar / subir foto de la placa</span><img id="placaFotoPrev"><input type="file" accept="image/*" id="placaFotoInput" style="display:none" onchange="onPlacaFoto(this)"></label>
+      <div class="file"><span id="placaFotoLbl">Aún sin foto</span><img id="placaFotoPrev">
+        <div class="pick">
+          <label class="pbtn cam">📷 Tomar foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="onPlacaFoto(this)"></label>
+          <label class="pbtn">🖼️ Subir archivo<input type="file" accept="image/*" style="display:none" onchange="onPlacaFoto(this)"></label>
+        </div>
+      </div>
       <label class="chk"><input type="checkbox" id="vehDecl"> Declaro bajo mi responsabilidad que el vehículo es de procedencia lícita y que cuento con derecho o autorización legítima para su tenencia y uso; que no está reportado como hurtado ni conozco adulteración de sus sistemas de identificación. Me comprometo a no usar el parqueadero ni el vehículo para actividades ilícitas. Autorizo a Aparta Suites Torre de Prado a registrar y conservar los datos y fotos del vehículo (placa y matrícula) para control de ingreso/salida y seguridad. *</label>
     </div>
 
@@ -182,7 +216,15 @@
   }
 
   let frontFile=null; // foto del documento del titular (del botón de arriba o de la sección 2)
-  let selfieFile=null, matriculaFile=null, placaFotoFile=null;
+  let backFile=null, selfieFile=null, matriculaFile=null, placaFotoFile=null;
+  const acFiles=[], acSelfies=[]; // fotos de acompañantes (documento y selfie), por índice
+
+  // Genera los dos botones de foto: cámara (capture) + archivo (sin capture). Ambos llaman al mismo handler.
+  function picker(handler,cam){
+    return `<div class="pick"><label class="pbtn cam">📷 Tomar foto<input type="file" accept="image/*" capture="${cam}" style="display:none" onchange="${handler}"></label><label class="pbtn">🖼️ Subir archivo<input type="file" accept="image/*" style="display:none" onchange="${handler}"></label></div>`;
+  }
+  function onBack(input){ const f=input.files[0]; if(!f) return; backFile=f; prev(input,'backPrev','backLbl'); }
+  function onAcSelfie(input,i){ const f=input.files[0]; if(!f) return; acSelfies[i]=f; prev(input,'ac_selfie_prev_'+i,'ac_selfie_lbl_'+i); }
   function fillTitular(r){ const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; }; set('nombre',r.nombre); set('docNumber',r.doc); set('nationality',r.nac); }
 
   // Selfie del titular
@@ -223,6 +265,7 @@
   }
   async function onAcomp(input,i){
     const f=input.files[0]; if(!f) return;
+    acFiles[i]=f;
     prev(input,'ac_prev_'+i,'ac_lbl_'+i);
     const r=await ocrDoc(f,document.getElementById('ac_lbl_'+i));
     const set=(id,v)=>{ const el=document.getElementById(id); if(el&&!el.value&&v) el.value=v; };
@@ -243,11 +286,13 @@
           <div><input id="ac_dn_${i}" placeholder="N° documento *"></div>
         </div>
         <input id="ac_nac_${i}" placeholder="Nacionalidad *" style="margin-top:6px">
-        <label class="file" style="margin-top:6px"><span id="ac_lbl_${i}">📷 Foto del documento *</span><img id="ac_prev_${i}"><input type="file" accept="image/*" id="ac_foto_${i}" style="display:none" onchange="onAcomp(this,${i})"></label>
-        <label class="file" style="margin-top:6px"><span id="ac_selfie_lbl_${i}">🤳 Selfie del acompañante (opcional)</span><img id="ac_selfie_prev_${i}"><input type="file" accept="image/*" id="ac_selfie_${i}" style="display:none" onchange="prev(this,'ac_selfie_prev_${i}','ac_selfie_lbl_${i}')"></label>
+        <div class="file" style="margin-top:6px"><span id="ac_lbl_${i}">Foto del documento * — aún sin foto</span><img id="ac_prev_${i}">${picker('onAcomp(this,'+i+')','environment')}</div>
+        <div class="file" style="margin-top:6px"><span id="ac_selfie_lbl_${i}">Selfie del acompañante (opcional)</span><img id="ac_selfie_prev_${i}">${picker('onAcSelfie(this,'+i+')','user')}</div>
       </div>`;
     }
     c.innerHTML = html;
+    // Al regenerar los campos se pierden las vistas previas: se vuelven a elegir las fotos.
+    acFiles.length = 0; acSelfies.length = 0;
   }
 
   // Firma (canvas)
@@ -290,15 +335,15 @@
       const dn=(document.getElementById('ac_dn_'+i)?.value||'').trim();
       const nac=(document.getElementById('ac_nac_'+i)?.value||'').trim();
       if(!nom||!dn){ msg.style.color='#dc2626'; msg.textContent=`Completa el nombre y documento del acompañante ${i+1}.`; return; }
-      const f=document.getElementById('ac_foto_'+i)?.files[0];
-      if(!f){ msg.style.color='#dc2626'; msg.textContent=`Sube la foto del documento del acompañante ${i+1}.`; return; }
-      const sf=document.getElementById('ac_selfie_'+i)?.files[0]||null;
+      const f=acFiles[i];
+      if(!f){ msg.style.color='#dc2626'; msg.textContent=`Toma o sube la foto del documento del acompañante ${i+1}.`; return; }
+      const sf=acSelfies[i]||null;
       companions.push({ nombre:nom, doc_type:document.getElementById('ac_dt_'+i).value, doc_number:dn, nationality:nac, _file:f, _selfie:sf });
     }
     const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='#15803d'; msg.textContent='Subiendo documentos…';
     try{
       const front=await subir(frontFile,'front');
-      const back=document.getElementById('docBack').files[0]?await subir(document.getElementById('docBack').files[0],'back'):null;
+      const back=backFile?await subir(backFile,'back'):null;
       const selfieUrl=await subir(selfieFile,'selfie');
       const matriculaUrl=matriculaFile?await subir(matriculaFile,'matricula'):null;
       const placaFotoUrl=placaFotoFile?await subir(placaFotoFile,'placa'):null;
