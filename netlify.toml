@@ -2,6 +2,11 @@
   command = "npm run build"
   publish = "dist"
 
+# Funciones serverless (correos de reserva, etc.)
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

@@ -329,7 +329,7 @@
       <label>Huéspedes<input type="number" id="bkGuests" min="1" value="2"></label>
       <label>Celular / WhatsApp<input id="bkPhone" placeholder="300 123 4567"></label>
       <label class="bk-full">Tu nombre<input id="bkName" placeholder="Nombre y apellido"></label>
-      <label class="bk-full">Correo (opcional)<input type="email" id="bkEmail" placeholder="correo@ejemplo.com"></label>
+      <label class="bk-full">Correo * <span style="font-weight:400;color:#94a3b8">(te enviamos la confirmación aquí)</span><input type="email" id="bkEmail" placeholder="correo@ejemplo.com"></label>
       <label class="bk-full">Mensaje (opcional)<textarea id="bkNote" rows="2" placeholder="¿Algo que debamos saber?"></textarea></label>
     </div>
     <p class="bk-msg" id="bkMsg"></p>
@@ -509,6 +509,7 @@
     const msg = $('bkMsg');
     if(!name){ msg.style.color = '#dc2626'; msg.textContent = 'Por favor escribe tu nombre.'; return; }
     if(!phone){ msg.style.color = '#dc2626'; msg.textContent = 'Déjanos un celular para confirmarte.'; return; }
+    if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ msg.style.color = '#dc2626'; msg.textContent = 'Escribe un correo válido: ahí te llega la confirmación.'; return; }
     if(!ci || !co || co <= ci){ msg.style.color = '#dc2626'; msg.textContent = 'Revisa las fechas (la salida debe ser después de la entrada).'; return; }
     const room_id = (bkRoom.match(/\d{3}/) || [''])[0];
     const btn = $('bkSubmit'); btn.disabled = true; btn.textContent = 'Enviando...';
@@ -525,14 +526,18 @@
           return;
         }}
       }
+      // Generamos el id aquí para poder avisar por correo sin depender de que la API lo devuelva
+      const newId = (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); }));
       const res = await fetch(`${SB_URL}/rest/v1/reservations`, {
         method: 'POST',
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ room_id, room_name: bkRoom, guest_name: name, guest_phone: phone, guest_email: email || null, check_in: ci, check_out: co, guests, status: 'pending', source: 'web', note: note || null })
+        body: JSON.stringify({ id: newId, room_id, room_name: bkRoom, guest_name: name, guest_phone: phone, guest_email: email, check_in: ci, check_out: co, guests, status: 'pending', source: 'web', note: note || null })
       });
       if(!res.ok){ throw new Error(await res.text()); }
+      // Correos automáticos (cliente + dueño). No bloquea la confirmación en pantalla si falla.
+      fetch('/.netlify/functions/send-booking-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: newId }) }).catch(() => {});
       msg.style.color = '#16a34a';
-      msg.textContent = '¡Solicitud enviada! Te confirmamos la disponibilidad por WhatsApp.';
+      msg.textContent = '¡Solicitud enviada! Te llegará un correo y te confirmamos la disponibilidad por WhatsApp.';
       setTimeout(() => {
         const m = `Hola Torre de Prado 👋 Solicité el *${bkRoom}* del ${ci} al ${co} para ${guests} huéspedes. Mi nombre: ${name}.`;
         window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(m)}`, '_blank');
