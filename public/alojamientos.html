@@ -534,10 +534,17 @@
         body: JSON.stringify({ id: newId, room_id, room_name: bkRoom, guest_name: name, guest_phone: phone, guest_email: email, check_in: ci, check_out: co, guests, status: 'pending', source: 'web', note: note || null })
       });
       if(!res.ok){ throw new Error(await res.text()); }
-      // Correos automáticos (cliente + dueño). No bloquea la confirmación en pantalla si falla.
-      fetch('/.netlify/functions/send-booking-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: newId }) }).catch(() => {});
       msg.style.color = '#16a34a';
-      msg.textContent = '¡Solicitud enviada! Te llegará un correo y te confirmamos la disponibilidad por WhatsApp.';
+      msg.textContent = '¡Solicitud enviada! Te confirmamos la disponibilidad por WhatsApp.';
+      // Correos automáticos (cliente + dueño). La reserva ya quedó guardada; esto solo informa si el correo salió.
+      fetch('/.netlify/functions/send-booking-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: newId }) })
+        .then(r => r.json())
+        .then(j => {
+          const ok = j && j.ok && String(j.cliente || '').startsWith('enviado');
+          msg.textContent += ok ? ' 📧 Te enviamos un correo con los datos (revisa Spam si no lo ves).' : ' (No pudimos enviarte el correo automático, pero tu solicitud sí quedó registrada.)';
+          if (!ok) console.warn('send-booking-email:', j);
+        })
+        .catch(e => console.warn('send-booking-email falló:', e));
       setTimeout(() => {
         const m = `Hola Torre de Prado 👋 Solicité el *${bkRoom}* del ${ci} al ${co} para ${guests} huéspedes. Mi nombre: ${name}.`;
         window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(m)}`, '_blank');
