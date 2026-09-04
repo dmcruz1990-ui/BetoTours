@@ -1,18 +1,26 @@
 // ============================================================
 // Correos automáticos de reserva web (Resend)
-// Se llama desde public/alojamientos.html justo después de guardar la reserva.
+//
+// Entradas que acepta:
+//   1) POST {id}            ← desde public/alojamientos.html tras guardar la reserva.
+//                              Busca la reserva en Supabase: debe existir, ser 'web' y < 15 min (anti-spam).
+//   2) POST webhook Supabase ← Database Webhook (INSERT en reservations), con header
+//                              x-webhook-secret = WEBHOOK_SECRET. Usa el registro directo.
+//                              Solo envía si source = 'web' (Ayenda/Booking ya avisan por su lado).
+//   3) GET ?check=1          ← diagnóstico sin secretos: qué está configurado y qué falla.
+//   4) GET ?test=<correo>&secret=<MAIL_TEST_SECRET> ← envía un correo de prueba real.
+//
+// Correos que envía por cada reserva web:
 //   • Al cliente: "Recibimos tu solicitud de reserva"
-//   • Al dueño:   "🔔 Nueva reserva web" con todos los datos y link al panel
+//   • Al dueño:   "🔔 Nueva reserva web" con datos y link al panel
 //
-// Seguridad: no envía nada "a ciegas". Recibe solo el id de la reserva y la
-// busca en Supabase: debe existir, ser de origen 'web' y tener menos de 15 min.
-// Así nadie puede usar esta función para mandar spam desde el dominio.
-//
-// Variables de entorno (Netlify → Site settings → Environment variables):
+// Variables de entorno (Netlify → Site configuration → Environment variables):
 //   RESEND_API_KEY        (obligatoria) clave de resend.com
-//   SUPABASE_SERVICE_KEY  (recomendada) clave service_role de Supabase, para leer la reserva
-//   MAIL_FROM             (opcional) remitente. Por defecto reservas@betotours.com
 //   MAIL_TO_OWNER         (opcional) a quién llega el aviso. Por defecto booking.edilberto@gmail.com
+//   MAIL_FROM             (opcional) remitente. Por defecto reservas@betotours.com
+//   SUPABASE_SERVICE_KEY  (opcional) clave service_role; si no está, usa la anon (la tabla es legible)
+//   WEBHOOK_SECRET        (opcional) activa la entrada por webhook de Supabase
+//   MAIL_TEST_SECRET      (opcional) activa el envío de prueba por URL
 // ============================================================
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://evodmxqehoyjfkiulrwf.supabase.co';
@@ -22,6 +30,8 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const MAIL_FROM = process.env.MAIL_FROM || 'Aparta Suites Torre de Prado <reservas@betotours.com>';
 const MAIL_TO_OWNER = process.env.MAIL_TO_OWNER || 'booking.edilberto@gmail.com';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
+const MAIL_TEST_SECRET = process.env.MAIL_TEST_SECRET || '';
 
 const WHATSAPP = '573006054141';
 const SITE = 'https://betotours.com';
@@ -34,7 +44,7 @@ type Reserva = {
 };
 
 const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body, null, 2), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 const fmtDate = (s: string) => {
@@ -43,6 +53,7 @@ const fmtDate = (s: string) => {
   return t.charAt(0).toUpperCase() + t.slice(1);
 };
 const nightsBetween = (a: string, b: string) => Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 86400000));
+const emailValido = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 async function sendEmail(to: string, subject: string, html: string, replyTo?: string) {
   const r = await fetch('https://api.resend.com/emails', {
@@ -79,30 +90,12 @@ const filas = (pares: [string, string][]) =>
 const boton = (href: string, texto: string, color = '#16a34a') =>
   `<a href="${href}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;font-weight:800;padding:13px 22px;border-radius:12px;font-size:14px">${texto}</a>`;
 
-// ---------- Handler ----------
-export default async (req: Request) => {
-  if (req.method !== 'POST') return json(405, { error: 'Método no permitido' });
-  if (!RESEND_API_KEY) return json(500, { error: 'Falta configurar RESEND_API_KEY en Netlify' });
-
-  let id = '';
-  try { const b = await req.json(); id = String(b?.id || ''); } catch { /* sin cuerpo */ }
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return json(400, { error: 'id inválido' });
-
-  // 1) Verificar que la reserva exista, sea web y sea reciente
-  const q = `${SUPABASE_URL}/rest/v1/reservations?id=eq.${id}&select=id,room_id,room_name,guest_name,guest_phone,guest_email,check_in,check_out,guests,note,source,created_at`;
-  const r = await fetch(q, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
-  if (!r.ok) return json(502, { error: `No se pudo leer la reserva (${r.status}). ¿Falta SUPABASE_SERVICE_KEY?` });
-  const rows = (await r.json()) as Reserva[];
-  const res = rows[0];
-  if (!res) return json(404, { error: 'Reserva no encontrada' });
-  if (res.source !== 'web') return json(403, { error: 'Solo se notifican reservas hechas en la web' });
-  if (Date.now() - Date.parse(res.created_at) > 15 * 60 * 1000) return json(403, { error: 'La reserva no es reciente' });
-
-  // 2) Armar los correos
+// ---------- Armar y enviar los dos correos de una reserva web ----------
+async function notificarReserva(res: Reserva) {
   const noches = nightsBetween(res.check_in, res.check_out);
   const apto = res.room_name || `Apartamento ${res.room_id}`;
   const nombre = esc(res.guest_name);
-  const primerNombre = esc(res.guest_name.split(' ')[0]);
+  const primerNombre = esc((res.guest_name || '').split(' ')[0]);
   const tel = (res.guest_phone || '').replace(/\D/g, '');
   const waCliente = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola Torre de Prado 👋 Soy ${res.guest_name}, solicité el ${apto} del ${res.check_in} al ${res.check_out}.`)}`;
 
@@ -140,13 +133,97 @@ export default async (req: Request) => {
     <p style="font-size:12px;color:#94a3b8;text-align:center;margin:12px 0 0">Recuerda: el sistema no deja confirmar si las fechas se cruzan con otra reserva confirmada.</p>
   `);
 
-  // 3) Enviar (los dos en paralelo; si uno falla, el otro igual sale)
   const asuntoCliente = `Recibimos tu solicitud de reserva · ${apto}`;
   const asuntoDueno = `🔔 Nueva reserva web: ${res.guest_name} · ${apto} · ${res.check_in} → ${res.check_out}`;
   const results = await Promise.allSettled([
-    res.guest_email ? sendEmail(res.guest_email, asuntoCliente, htmlCliente, MAIL_TO_OWNER) : Promise.reject(new Error('El cliente no dejó correo')),
+    res.guest_email && emailValido(res.guest_email)
+      ? sendEmail(res.guest_email, asuntoCliente, htmlCliente, MAIL_TO_OWNER)
+      : Promise.reject(new Error('El cliente no dejó un correo válido')),
     sendEmail(MAIL_TO_OWNER, asuntoDueno, htmlDueno, res.guest_email || undefined),
   ]);
   const estado = (p: PromiseSettledResult<unknown>) => p.status === 'fulfilled' ? 'enviado' : `error: ${(p as PromiseRejectedResult).reason?.message || 'desconocido'}`;
-  return json(200, { ok: true, cliente: estado(results[0]), dueno: estado(results[1]) });
+  return { cliente: estado(results[0]), dueno: estado(results[1]) };
+}
+
+// ---------- Diagnóstico (sin exponer secretos) ----------
+async function diagnostico() {
+  const out: Record<string, unknown> = {
+    resend_api_key: RESEND_API_KEY ? `configurada (${RESEND_API_KEY.slice(0, 6)}…)` : '❌ FALTA — agrégala en Netlify y vuelve a desplegar',
+    remitente: MAIL_FROM,
+    aviso_a: MAIL_TO_OWNER,
+    supabase_service_key: process.env.SUPABASE_SERVICE_KEY ? 'configurada' : 'no (usa la clave pública; la tabla es legible)',
+    webhook_supabase: WEBHOOK_SECRET ? 'activo' : 'no configurado (opcional)',
+    correo_de_prueba: MAIL_TEST_SECRET ? 'activo (?test=correo&secret=…)' : 'no configurado (opcional)',
+  };
+  // ¿Se puede leer la tabla de reservas?
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/reservations?select=id&limit=1`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
+    out.lectura_supabase = r.ok ? '✅ ok' : `❌ HTTP ${r.status}: ${(await r.text()).slice(0, 120)}`;
+  } catch (e: any) { out.lectura_supabase = `❌ ${e.message}`; }
+  // ¿La clave de Resend sirve y el dominio está verificado?
+  if (RESEND_API_KEY) {
+    try {
+      const r = await fetch('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${RESEND_API_KEY}` } });
+      if (!r.ok) out.resend = `❌ la clave no sirve (HTTP ${r.status}): ${(await r.text()).slice(0, 120)}`;
+      else {
+        const d = await r.json();
+        const doms = (d?.data || []).map((x: any) => `${x.name}: ${x.status}`);
+        const fromDom = (MAIL_FROM.match(/@([^>\s]+)/) || [])[1] || '';
+        const okDom = (d?.data || []).find((x: any) => x.name === fromDom && x.status === 'verified');
+        out.resend = okDom ? `✅ clave ok · dominio ${fromDom} verificado` : `⚠️ clave ok, pero el dominio del remitente (${fromDom || '?'}) no aparece verificado. Dominios: ${doms.join(', ') || 'ninguno'}`;
+      }
+    } catch (e: any) { out.resend = `❌ ${e.message}`; }
+  }
+  return out;
+}
+
+// ---------- Handler ----------
+export default async (req: Request) => {
+  const url = new URL(req.url);
+
+  // GET ?check=1 → diagnóstico
+  if (req.method === 'GET' && url.searchParams.get('check')) return json(200, await diagnostico());
+
+  // GET ?test=correo&secret=… → correo de prueba real
+  if (req.method === 'GET' && url.searchParams.get('test')) {
+    if (!MAIL_TEST_SECRET) return json(403, { error: 'Envío de prueba desactivado: configura MAIL_TEST_SECRET en Netlify' });
+    if (url.searchParams.get('secret') !== MAIL_TEST_SECRET) return json(403, { error: 'secret incorrecto' });
+    if (!RESEND_API_KEY) return json(500, { error: 'Falta configurar RESEND_API_KEY en Netlify' });
+    const to = url.searchParams.get('test') || '';
+    if (!emailValido(to)) return json(400, { error: 'correo inválido' });
+    const demo: Reserva = { id: 'prueba', room_id: '301', room_name: 'Aparta Suite 301 (PRUEBA)', guest_name: 'Cliente de Prueba', guest_phone: '3001234567',
+      guest_email: to, check_in: '2026-12-20', check_out: '2026-12-23', guests: 2, note: 'Este es un correo de prueba del sistema.', source: 'web', created_at: new Date().toISOString() };
+    try { return json(200, { ok: true, ...(await notificarReserva(demo)), nota: `Cliente → ${to} · Dueño → ${MAIL_TO_OWNER}. Revisa Spam/Promociones.` }); }
+    catch (e: any) { return json(500, { ok: false, error: e.message }); }
+  }
+
+  if (req.method !== 'POST') return json(405, { error: 'Método no permitido', ayuda: 'Abre ?check=1 para ver el diagnóstico' });
+  if (!RESEND_API_KEY) return json(500, { error: 'Falta configurar RESEND_API_KEY en Netlify' });
+
+  let body: any = {};
+  try { body = await req.json(); } catch { /* sin cuerpo */ }
+
+  // Entrada 2: webhook de Supabase (INSERT en reservations)
+  if (body && body.type && body.record) {
+    if (!WEBHOOK_SECRET) return json(403, { error: 'Webhook desactivado: configura WEBHOOK_SECRET en Netlify' });
+    if (req.headers.get('x-webhook-secret') !== WEBHOOK_SECRET) return json(403, { error: 'secret incorrecto' });
+    if (body.type !== 'INSERT' || body.table !== 'reservations') return json(200, { ok: true, ignorado: `${body.type} en ${body.table}` });
+    const rec = body.record as Reserva;
+    if (rec.source !== 'web') return json(200, { ok: true, ignorado: `fuente '${rec.source}' (solo se notifican reservas web)` });
+    if (!rec.guest_name || !rec.check_in || !rec.check_out) return json(200, { ok: true, ignorado: 'registro incompleto' });
+    return json(200, { ok: true, via: 'webhook', ...(await notificarReserva(rec)) });
+  }
+
+  // Entrada 1: la página manda el id de la reserva recién creada
+  const id = String(body?.id || '');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return json(400, { error: 'id inválido' });
+  const q = `${SUPABASE_URL}/rest/v1/reservations?id=eq.${id}&select=id,room_id,room_name,guest_name,guest_phone,guest_email,check_in,check_out,guests,note,source,created_at`;
+  const r = await fetch(q, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
+  if (!r.ok) return json(502, { error: `No se pudo leer la reserva (HTTP ${r.status})` });
+  const rows = (await r.json()) as Reserva[];
+  const res = rows[0];
+  if (!res) return json(404, { error: 'Reserva no encontrada' });
+  if (res.source !== 'web') return json(403, { error: 'Solo se notifican reservas hechas en la web' });
+  if (Date.now() - Date.parse(res.created_at) > 15 * 60 * 1000) return json(403, { error: 'La reserva no es reciente' });
+  return json(200, { ok: true, via: 'pagina', ...(await notificarReserva(res)) });
 };
