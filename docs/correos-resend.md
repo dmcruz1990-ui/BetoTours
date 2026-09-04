@@ -75,19 +75,43 @@ leen las variables al desplegar.
 ---
 
 ## 🔁 Webhook de Supabase — REQUERIDO para los correos de Ayenda
-Con el webhook, es **Supabase** quien avisa a la función cada vez que entra una reserva
-(la inserte el robot de Ayenda o la página), sin depender del navegador del cliente.
-Sin esto, las reservas de Ayenda **no** generan correo.
+Con el webhook, es **Supabase** quien avisa a la función cada vez que el robot inserta una
+reserva de Ayenda. Sin esto, las reservas de Ayenda **no** generan correo.
+
+> Reparto para no duplicar: las reservas **web** las notifica **la página** al guardarlas;
+> el webhook notifica solo las de **Ayenda** (`WEBHOOK_SOURCES`, por defecto `ayenda`).
+> Manuales, bloqueos y canceladas nunca envían.
 
 1. En Netlify agrega `WEBHOOK_SECRET` con una palabra secreta larga → Trigger deploy.
-2. Supabase → **Database → Webhooks → Create a new hook**:
-   - **Name:** `correo-reserva-web`
-   - **Table:** `reservations` · **Events:** solo `Insert`
-   - **Type:** HTTP Request · **Method:** `POST`
-   - **URL:** `https://betotours.com/.netlify/functions/send-booking-email`
-   - **HTTP Headers:** agregar `x-webhook-secret` = la misma palabra secreta
-3. Listo. La función ignora automáticamente las reservas que no sean `web`
-   (Ayenda, manuales, bloqueos), así no se duplican avisos.
+2. Crea el disparador con SQL (funciona aunque el módulo "Database Webhooks" del panel no esté
+   activado — en este proyecto daba `schema "supabase_functions" does not exist`).
+   Supabase → **SQL Editor → New query**, cambiando `TU_PALABRA_SECRETA` por la misma de Netlify:
+
+```sql
+-- Extensión para hacer peticiones HTTP desde la base de datos
+create extension if not exists pg_net with schema extensions;
+
+-- Función: avisa a Netlify cada vez que entra una reserva
+create or replace function public.notificar_reserva_correo()
+returns trigger language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform net.http_post(
+    url := 'https://betotours.com/.netlify/functions/send-booking-email',
+    headers := '{"Content-Type":"application/json","x-webhook-secret":"TU_PALABRA_SECRETA"}'::jsonb,
+    body := jsonb_build_object('type', TG_OP, 'table', TG_TABLE_NAME, 'schema', TG_TABLE_SCHEMA, 'record', to_jsonb(new)),
+    timeout_milliseconds := 5000
+  );
+  return new;
+end $$;
+
+drop trigger if exists correo_reserva on public.reservations;
+create trigger correo_reserva
+  after insert on public.reservations
+  for each row execute function public.notificar_reserva_correo();
+```
+
+3. Comprueba en `?check=1` que diga `webhook_supabase: activo`. Para probar de verdad, haz una
+   reserva por Ayenda (o espera a que el robot inserte una) y revisa los correos.
 
 ---
 
