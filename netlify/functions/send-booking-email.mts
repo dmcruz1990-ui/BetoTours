@@ -164,7 +164,10 @@ async function diagnostico() {
   if (RESEND_API_KEY) {
     try {
       const r = await fetch('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${RESEND_API_KEY}` } });
-      if (!r.ok) out.resend = `❌ la clave no sirve (HTTP ${r.status}): ${(await r.text()).slice(0, 120)}`;
+      const txt = r.ok ? '' : await r.text();
+      // Una clave con permiso "solo envío" (lo recomendado) no puede listar dominios: eso es CORRECTO, no un error.
+      if (!r.ok && /restricted_api_key|only send/i.test(txt)) out.resend = '✅ clave válida con permiso de solo envío (correcto). Con esta clave no se puede leer la lista de dominios; verifica el dominio en resend.com → Domains.';
+      else if (!r.ok) out.resend = `❌ la clave no sirve (HTTP ${r.status}): ${txt.slice(0, 120)}`;
       else {
         const d = await r.json();
         const doms = (d?.data || []).map((x: any) => `${x.name}: ${x.status}`);
