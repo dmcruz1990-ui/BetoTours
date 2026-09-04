@@ -6,7 +6,8 @@
 //                              Busca la reserva en Supabase: debe existir, ser 'web' y < 15 min (anti-spam).
 //   2) POST webhook Supabase ← Database Webhook (INSERT en reservations), con header
 //                              x-webhook-secret = WEBHOOK_SECRET. Usa el registro directo.
-//                              Solo envía si source = 'web' (Ayenda/Booking ya avisan por su lado).
+//                              Envía para source 'web' y 'ayenda' (las de Ayenda las inserta el robot
+//                              de Gmail); ignora 'manual', bloqueos y canceladas.
 //   3) GET ?check=1          ← diagnóstico sin secretos: qué está configurado y qué falla.
 //   4) GET ?test=<correo>&secret=<MAIL_TEST_SECRET> ← envía un correo de prueba real.
 //
@@ -40,8 +41,12 @@ const HOTEL = { name: 'Aparta Suites Torre de Prado', address: 'Carrera 47 # 64-
 type Reserva = {
   id: string; room_id: string; room_name: string | null; guest_name: string; guest_phone: string | null;
   guest_email: string | null; check_in: string; check_out: string; guests: number | null; note: string | null;
-  source: string; created_at: string;
+  source: string; created_at: string; status?: string | null; total?: number | null; external_ref?: string | null;
 };
+
+// Fuentes que disparan correos: 'web' (formulario de la página) y 'ayenda' (motor de Ayenda,
+// que el robot de Gmail inserta en la tabla). 'manual' y bloqueos del panel NO avisan.
+const FUENTES_NOTIFICADAS = (process.env.MAIL_SOURCES || 'web,ayenda').split(',').map(s => s.trim()).filter(Boolean);
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body, null, 2), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -99,15 +104,34 @@ async function notificarReserva(res: Reserva) {
   const tel = (res.guest_phone || '').replace(/\D/g, '');
   const waCliente = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola Torre de Prado 👋 Soy ${res.guest_name}, solicité el ${apto} del ${res.check_in} al ${res.check_out}.`)}`;
 
+  // Ayenda (o cualquier reserva ya confirmada) → "Reserva confirmada". Web → "Recibimos tu solicitud".
+  const esAyenda = res.source === 'ayenda';
+  const confirmada = esAyenda || res.status === 'confirmed';
+  const ref = ((res.external_ref || '').replace(/^ayenda-/i, '') || ((res.note || '').match(/Ref\s*(\d+)/i) || [])[1] || '').trim();
+  const totalStr = res.total ? `$${Number(res.total).toLocaleString('es-CO')}` : '';
+  const canal = esAyenda ? 'Ayenda' : 'la web';
+
   const detalle = filas([
+    ...(ref ? [['N° de reserva', `<b>${esc(ref)}</b>`] as [string, string]] : []),
     ['Apartamento', `<b>${esc(apto)}</b>`],
     ['Entrada', `${esc(fmtDate(res.check_in))} · desde 3:00 p.m.`],
     ['Salida', `${esc(fmtDate(res.check_out))} · hasta 11:00 a.m.`],
     ['Noches', `${noches}`],
     ['Huéspedes', `${res.guests ?? 1}`],
+    ...(totalStr ? [['Total', `<b>${totalStr}</b>`] as [string, string]] : []),
   ]);
 
-  const htmlCliente = layout(`¡Recibimos tu solicitud, ${primerNombre}! 🎉`, `
+  const htmlCliente = confirmada
+    ? layout(`¡Tu reserva está confirmada, ${primerNombre}! ✅`, `
+    <p style="font-size:14px;line-height:1.55;margin:0 0 8px">Gracias por elegir <b>${esc(HOTEL.name)}</b>. Estos son los datos de tu reserva:</p>
+    ${detalle}
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;font-size:14px;line-height:1.5;margin-bottom:18px">
+      <b>Check-in desde las 3:00 p.m. · Check-out hasta las 11:00 a.m.</b><br>Antes de tu llegada te enviaremos por WhatsApp la guía de bienvenida (WiFi, cómo llegar, recomendaciones). Si tienes alguna duda, escríbenos:
+    </div>
+    <div style="text-align:center;margin-bottom:18px">${boton(waCliente, '📲 Escribirnos por WhatsApp')}</div>
+    <p style="font-size:12px;color:#64748b;line-height:1.5;margin:0">📍 ${esc(HOTEL.address)}<br>¡Te esperamos en Medellín! 🇨🇴</p>
+  `)
+    : layout(`¡Recibimos tu solicitud, ${primerNombre}! 🎉`, `
     <p style="font-size:14px;line-height:1.55;margin:0 0 8px">Gracias por elegir <b>${esc(HOTEL.name)}</b>. Ya tenemos tu solicitud de reserva con estos datos:</p>
     ${detalle}
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;font-size:14px;line-height:1.5;margin-bottom:18px">
@@ -117,9 +141,10 @@ async function notificarReserva(res: Reserva) {
     <p style="font-size:12px;color:#64748b;line-height:1.5;margin:0">📍 ${esc(HOTEL.address)}<br>Esta solicitud queda <b>sujeta a disponibilidad</b> hasta que la confirmemos.</p>
   `);
 
-  const htmlDueno = layout('🔔 Nueva reserva desde la web', `
-    <p style="font-size:14px;line-height:1.55;margin:0 0 8px"><b>${nombre}</b> acaba de solicitar una reserva en la página. Está <b>pendiente</b> de confirmar.</p>
+  const htmlDueno = layout(confirmada ? `🔔 Nueva reserva confirmada (${canal})` : '🔔 Nueva reserva desde la web', `
+    <p style="font-size:14px;line-height:1.55;margin:0 0 8px"><b>${nombre}</b> ${confirmada ? `acaba de reservar por <b>${esc(canal)}</b>. La reserva ya está <b>confirmada</b>.` : 'acaba de solicitar una reserva en la página. Está <b>pendiente</b> de confirmar.'}</p>
     ${filas([
+      ...(ref ? [['N° de reserva', `<b>${esc(ref)}</b>`] as [string, string]] : []),
       ['Cliente', `<b>${nombre}</b>`],
       ['WhatsApp', tel ? `<a href="https://wa.me/${tel}" style="color:#15803d;font-weight:bold">${esc(res.guest_phone)}</a>` : '—'],
       ['Correo', res.guest_email ? `<a href="mailto:${esc(res.guest_email)}" style="color:#15803d">${esc(res.guest_email)}</a>` : '—'],
@@ -127,14 +152,15 @@ async function notificarReserva(res: Reserva) {
       ['Entrada', esc(fmtDate(res.check_in))],
       ['Salida', esc(fmtDate(res.check_out))],
       ['Noches / Huéspedes', `${noches} noche${noches === 1 ? '' : 's'} · ${res.guests ?? 1} huésped(es)`],
-      ['Nota del cliente', res.note ? esc(res.note) : '—'],
+      ...(totalStr ? [['Total', `<b>${totalStr}</b>`] as [string, string]] : []),
+      ['Nota', res.note ? esc(res.note) : '—'],
     ])}
-    <div style="text-align:center;margin-bottom:8px">${boton(`${SITE}/#/admin`, '🗂️ Abrir el panel y confirmar')}</div>
-    <p style="font-size:12px;color:#94a3b8;text-align:center;margin:12px 0 0">Recuerda: el sistema no deja confirmar si las fechas se cruzan con otra reserva confirmada.</p>
+    <div style="text-align:center;margin-bottom:8px">${boton(`${SITE}/#/admin`, confirmada ? '🗂️ Ver en el panel' : '🗂️ Abrir el panel y confirmar')}</div>
+    ${confirmada ? '' : '<p style="font-size:12px;color:#94a3b8;text-align:center;margin:12px 0 0">Recuerda: el sistema no deja confirmar si las fechas se cruzan con otra reserva confirmada.</p>'}
   `);
 
-  const asuntoCliente = `Recibimos tu solicitud de reserva · ${apto}`;
-  const asuntoDueno = `🔔 Nueva reserva web: ${res.guest_name} · ${apto} · ${res.check_in} → ${res.check_out}`;
+  const asuntoCliente = confirmada ? `Reserva confirmada · ${apto}${ref ? ` · N° ${ref}` : ''}` : `Recibimos tu solicitud de reserva · ${apto}`;
+  const asuntoDueno = `🔔 Nueva reserva ${confirmada ? `(${canal})` : 'web'}: ${res.guest_name} · ${apto} · ${res.check_in} → ${res.check_out}`;
   const results = await Promise.allSettled([
     res.guest_email && emailValido(res.guest_email)
       ? sendEmail(res.guest_email, asuntoCliente, htmlCliente, MAIL_TO_OWNER)
@@ -154,6 +180,7 @@ async function diagnostico() {
     supabase_service_key: process.env.SUPABASE_SERVICE_KEY ? 'configurada' : 'no (usa la clave pública; la tabla es legible)',
     webhook_supabase: WEBHOOK_SECRET ? 'activo' : 'no configurado (opcional)',
     correo_de_prueba: MAIL_TEST_SECRET ? 'activo (?test=correo&secret=…)' : 'no configurado (opcional)',
+    fuentes_notificadas: FUENTES_NOTIFICADAS.join(', ') + ' (las de Ayenda requieren el webhook activo)',
   };
   // ¿Se puede leer la tabla de reservas?
   try {
@@ -212,15 +239,17 @@ export default async (req: Request) => {
     if (req.headers.get('x-webhook-secret') !== WEBHOOK_SECRET) return json(403, { error: 'secret incorrecto' });
     if (body.type !== 'INSERT' || body.table !== 'reservations') return json(200, { ok: true, ignorado: `${body.type} en ${body.table}` });
     const rec = body.record as Reserva;
-    if (rec.source !== 'web') return json(200, { ok: true, ignorado: `fuente '${rec.source}' (solo se notifican reservas web)` });
+    if (!FUENTES_NOTIFICADAS.includes(rec.source)) return json(200, { ok: true, ignorado: `fuente '${rec.source}' (se notifican: ${FUENTES_NOTIFICADAS.join(', ')})` });
+    if (rec.status === 'cancelled') return json(200, { ok: true, ignorado: 'reserva cancelada' });
     if (!rec.guest_name || !rec.check_in || !rec.check_out) return json(200, { ok: true, ignorado: 'registro incompleto' });
+    if (/^bloquead/i.test(rec.guest_name)) return json(200, { ok: true, ignorado: 'bloqueo de fechas' });
     return json(200, { ok: true, via: 'webhook', ...(await notificarReserva(rec)) });
   }
 
   // Entrada 1: la página manda el id de la reserva recién creada
   const id = String(body?.id || '');
   if (!/^[0-9a-f-]{36}$/i.test(id)) return json(400, { error: 'id inválido' });
-  const q = `${SUPABASE_URL}/rest/v1/reservations?id=eq.${id}&select=id,room_id,room_name,guest_name,guest_phone,guest_email,check_in,check_out,guests,note,source,created_at`;
+  const q = `${SUPABASE_URL}/rest/v1/reservations?id=eq.${id}&select=id,room_id,room_name,guest_name,guest_phone,guest_email,check_in,check_out,guests,note,source,created_at,status,total,external_ref`;
   const r = await fetch(q, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
   if (!r.ok) return json(502, { error: `No se pudo leer la reserva (HTTP ${r.status})` });
   const rows = (await r.json()) as Reserva[];
