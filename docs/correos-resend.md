@@ -8,10 +8,22 @@ la función `netlify/functions/send-booking-email.mts` envía **dos correos**:
 | El cliente | *Recibimos tu solicitud de reserva · Apto* | Datos de la reserva + botón de WhatsApp |
 | El dueño (`booking.edilberto@gmail.com`) | *🔔 Nueva reserva web: nombre · apto · fechas* | Todos los datos + botón "Abrir el panel" |
 
-> ⚠️ El botón **RESERVAR EN LÍNEA** lleva al motor de **Ayenda** (`engine.ayenda.co`).
-> Esas reservas NO pasan por la página: las notifica Ayenda y luego el robot de
-> Gmail (Apps Script) las trae al calendario con `source = 'ayenda'`. Este sistema
-> de correos **solo** cubre las reservas hechas con SOLICITAR RESERVA (`source = 'web'`).
+## Reservas hechas por Ayenda (botón RESERVAR EN LÍNEA) — también reciben correo
+El botón **RESERVAR EN LÍNEA** lleva al motor de **Ayenda** (`engine.ayenda.co`), que es
+donde el cliente paga. Esas reservas no pasan por la página, pero **sí llegan al sistema**:
+Ayenda le manda un correo a Beto → el **robot de Gmail (Apps Script)** lo lee cada 5-10 min
+→ inserta la reserva en la tabla con `source = 'ayenda'` → **Supabase avisa a la función
+(webhook)** → salen los dos correos con nuestro formato:
+
+| Para | Asunto |
+|---|---|
+| El cliente | *Reserva confirmada · Apto · N° 4197408* (con total y horarios) |
+| El dueño | *🔔 Nueva reserva (Ayenda): nombre · apto · fechas* |
+
+Requisitos: (1) el robot de Gmail activo con su disparador, (2) el **webhook de Supabase**
+configurado (sección más abajo), (3) que el correo de Ayenda traiga el email del cliente
+(el robot lo extrae de la línea `Email:`). Llega con el retraso del robot (≤10 min).
+Las reservas **canceladas**, las **manuales** del panel y los **bloqueos** no envían nada.
 
 ---
 
@@ -62,9 +74,10 @@ leen las variables al desplegar.
 
 ---
 
-## 🔁 (Recomendado) Webhook de Supabase: el correo sale aunque el cliente cierre la página
-Hoy la página llama a la función después de guardar. Con el webhook, es **Supabase** quien
-avisa a la función cada vez que entra una reserva, sin depender del navegador del cliente.
+## 🔁 Webhook de Supabase — REQUERIDO para los correos de Ayenda
+Con el webhook, es **Supabase** quien avisa a la función cada vez que entra una reserva
+(la inserte el robot de Ayenda o la página), sin depender del navegador del cliente.
+Sin esto, las reservas de Ayenda **no** generan correo.
 
 1. En Netlify agrega `WEBHOOK_SECRET` con una palabra secreta larga → Trigger deploy.
 2. Supabase → **Database → Webhooks → Create a new hook**:
