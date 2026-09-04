@@ -47,6 +47,8 @@ type Reserva = {
 // Fuentes que disparan correos: 'web' (formulario de la página) y 'ayenda' (motor de Ayenda,
 // que el robot de Gmail inserta en la tabla). 'manual' y bloqueos del panel NO avisan.
 const FUENTES_NOTIFICADAS = (process.env.MAIL_SOURCES || 'web,ayenda').split(',').map(s => s.trim()).filter(Boolean);
+// Fuentes que notifica el WEBHOOK. 'web' NO va aquí porque la página ya la notifica al guardar (evita duplicados).
+const FUENTES_WEBHOOK = (process.env.WEBHOOK_SOURCES || 'ayenda').split(',').map(s => s.trim()).filter(Boolean);
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body, null, 2), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -180,7 +182,7 @@ async function diagnostico() {
     supabase_service_key: process.env.SUPABASE_SERVICE_KEY ? 'configurada' : 'no (usa la clave pública; la tabla es legible)',
     webhook_supabase: WEBHOOK_SECRET ? 'activo' : 'no configurado (opcional)',
     correo_de_prueba: MAIL_TEST_SECRET ? 'activo (?test=correo&secret=…)' : 'no configurado (opcional)',
-    fuentes_notificadas: FUENTES_NOTIFICADAS.join(', ') + ' (las de Ayenda requieren el webhook activo)',
+    fuentes_notificadas: `web (la página al guardar) · ${FUENTES_WEBHOOK.join(', ')} (por webhook de Supabase)`,
   };
   // ¿Se puede leer la tabla de reservas?
   try {
@@ -239,7 +241,9 @@ export default async (req: Request) => {
     if (req.headers.get('x-webhook-secret') !== WEBHOOK_SECRET) return json(403, { error: 'secret incorrecto' });
     if (body.type !== 'INSERT' || body.table !== 'reservations') return json(200, { ok: true, ignorado: `${body.type} en ${body.table}` });
     const rec = body.record as Reserva;
-    if (!FUENTES_NOTIFICADAS.includes(rec.source)) return json(200, { ok: true, ignorado: `fuente '${rec.source}' (se notifican: ${FUENTES_NOTIFICADAS.join(', ')})` });
+    // Las reservas 'web' ya las notifica la página al guardarlas → el webhook no las repite (evita correos dobles).
+    if (rec.source === 'web' && !FUENTES_WEBHOOK.includes('web')) return json(200, { ok: true, ignorado: "fuente 'web': la página ya envía ese correo (evita duplicados)" });
+    if (!FUENTES_WEBHOOK.includes(rec.source)) return json(200, { ok: true, ignorado: `fuente '${rec.source}' (el webhook notifica: ${FUENTES_WEBHOOK.join(', ')})` });
     if (rec.status === 'cancelled') return json(200, { ok: true, ignorado: 'reserva cancelada' });
     if (!rec.guest_name || !rec.check_in || !rec.check_out) return json(200, { ok: true, ignorado: 'registro incompleto' });
     if (/^bloquead/i.test(rec.guest_name)) return json(200, { ok: true, ignorado: 'bloqueo de fechas' });
