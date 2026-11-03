@@ -71,7 +71,7 @@ function procesarReservas() {
     thread.getMessages().forEach(msg => {
       if (!msg.isUnread()) return;
       const data = parseEmailAyenda(msg);
-      if (data) enviarASupabase(data);
+      if (data) enviarASupabase(completarDatos(data, msg));
       msg.markRead();
     });
   });
@@ -111,6 +111,103 @@ function enviarASupabase(data) {
     headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Prefer: 'resolution=merge-duplicates,return=minimal' },
     payload: JSON.stringify(data), muteHttpExceptions: true,
   });
+}
+
+// ===== PARCHE TELÉFONO (pegar al final del robot) =====
+// Números del hotel / de Beto: aparecen en los correos pero NUNCA son del cliente.
+const TELEFONOS_HOTEL = ['3006054141', '3332482626', '3043359788'];
+
+function normalizarTel(s) {
+  const tieneMas = /^\s*\(?\+/.test(String(s));
+  const digitos = String(s).replace(/\D/g, '');
+  if (digitos.length < 7 || digitos.length > 15) return null;
+  if (TELEFONOS_HOTEL.includes(digitos.slice(-10))) return null;
+  return (tieneMas ? '+' : '') + digitos;
+}
+
+// Busca el teléfono del cliente en el texto plano y en el HTML del correo.
+function telefonoDe(msg) {
+  const html = (msg.getBody() || '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|td|th|li|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#43;|&plus;/g, '+');
+  const textos = [msg.getPlainBody() || '', html];
+  const conEtiqueta = /(?:tel[eé]fonos?|celular(?:es)?|m[oó]vil|whats\s?app|phone|tel\.?|n[uú]mero de contacto|contacto)\s*[:\-]?\s*(\(?\+?\d[\d\s().\-]{5,}\d)/gi;
+  const sueltos = /(?:\(?\+\d{1,3}\)?[\s.\-]?)?\b3\d{2}[\s.\-]?\d{3}[\s.\-]?\d{4}\b|\(?\+\d{1,3}\)?[\s.\-]?\d[\d\s.\-]{6,13}\d/g;
+  for (const re of [conEtiqueta, sueltos]) {
+    for (const t of textos) {
+      re.lastIndex = 0; let m;
+      while ((m = re.exec(t))) { const n = normalizarTel(m[1] || m[0]); if (n) return n; }
+    }
+  }
+  return null;
+}
+
+// Completa el teléfono si falta y quita los campos vacíos, para que un segundo
+// correo de la misma reserva NO borre el teléfono que ya estaba guardado.
+function completarDatos(data, msg) {
+  if (!data) return data;
+  const tel = data.guest_phone ? normalizarTel(data.guest_phone) : null;
+  data.guest_phone = tel || telefonoDe(msg);
+  Object.keys(data).forEach(k => { if (data[k] === null || data[k] === undefined || data[k] === '') delete data[k]; });
+  return data;
+}
+```
+
+---
+
+## 🔧 Parche: el teléfono del cliente no llega (para el robot que YA tienes)
+Síntoma: en el panel y en el correo de aviso la reserva de Ayenda sale **sin teléfono**.
+Causas que corrige: (1) el teléfono venía como `Celular:`, con `(+57)` o solo en el HTML del
+correo; (2) cuando llegan dos correos de la misma reserva, el segundo borraba el teléfono.
+
+1. **script.google.com** → abre el proyecto del robot.
+2. Baja hasta el **final** del código y pega el bloque de abajo.
+3. Usa **Buscar (Ctrl+F)** y busca `enviarASupabase(data)`. Cada vez que aparezca, cámbialo por
+   `enviarASupabase(completarDatos(data, msg))`. (Si en tu código el correo no se llama `msg`,
+   usa el nombre que tenga, el mismo que se le pasa a `parseEmailAyenda(...)`.)
+4. 💾 Guardar. No hay que tocar el activador.
+5. Para recuperar el teléfono de reservas que ya entraron sin él: en Gmail marca esos correos de
+   Ayenda como **no leídos**; en la próxima vuelta el robot los vuelve a leer y completa el teléfono
+   (no se duplican reservas ni se reenvían correos).
+
+```javascript
+// ===== PARCHE TELÉFONO (pegar al final del robot) =====
+// Números del hotel / de Beto: aparecen en los correos pero NUNCA son del cliente.
+const TELEFONOS_HOTEL = ['3006054141', '3332482626', '3043359788'];
+
+function normalizarTel(s) {
+  const tieneMas = /^\s*\(?\+/.test(String(s));
+  const digitos = String(s).replace(/\D/g, '');
+  if (digitos.length < 7 || digitos.length > 15) return null;
+  if (TELEFONOS_HOTEL.includes(digitos.slice(-10))) return null;
+  return (tieneMas ? '+' : '') + digitos;
+}
+
+// Busca el teléfono del cliente en el texto plano y en el HTML del correo.
+function telefonoDe(msg) {
+  const html = (msg.getBody() || '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|td|th|li|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#43;|&plus;/g, '+');
+  const textos = [msg.getPlainBody() || '', html];
+  const conEtiqueta = /(?:tel[eé]fonos?|celular(?:es)?|m[oó]vil|whats\s?app|phone|tel\.?|n[uú]mero de contacto|contacto)\s*[:\-]?\s*(\(?\+?\d[\d\s().\-]{5,}\d)/gi;
+  const sueltos = /(?:\(?\+\d{1,3}\)?[\s.\-]?)?\b3\d{2}[\s.\-]?\d{3}[\s.\-]?\d{4}\b|\(?\+\d{1,3}\)?[\s.\-]?\d[\d\s.\-]{6,13}\d/g;
+  for (const re of [conEtiqueta, sueltos]) {
+    for (const t of textos) {
+      re.lastIndex = 0; let m;
+      while ((m = re.exec(t))) { const n = normalizarTel(m[1] || m[0]); if (n) return n; }
+    }
+  }
+  return null;
+}
+
+// Completa el teléfono si falta y quita los campos vacíos, para que un segundo
+// correo de la misma reserva NO borre el teléfono que ya estaba guardado.
+function completarDatos(data, msg) {
+  if (!data) return data;
+  const tel = data.guest_phone ? normalizarTel(data.guest_phone) : null;
+  data.guest_phone = tel || telefonoDe(msg);
+  Object.keys(data).forEach(k => { if (data[k] === null || data[k] === undefined || data[k] === '') delete data[k]; });
+  return data;
 }
 ```
 
