@@ -53,6 +53,32 @@ create policy "reservations_insert" on public.reservations
 
 ---
 
+## Si no pueden entrar al panel
+
+El login ahora dice la **causa real**:
+
+| Mensaje | Qué hacer |
+|---|---|
+| *Correo o contraseña incorrectos* | Usar **"¿Olvidaste tu contraseña?"** o cambiarla en Supabase (abajo) |
+| *Este usuario existe pero no está confirmado* | Supabase → Authentication → Users → el usuario → **Confirm** (o recrearlo con *Auto Confirm User*) |
+| *Demasiados intentos* | Esperar unos minutos |
+| *No hay conexión con el servidor* | Revisar internet |
+
+### Ver los usuarios y poner una contraseña nueva (Supabase)
+1. supabase.com → proyecto de BetoTours → **Authentication → Users**. Ahí está la lista de
+   correos que pueden entrar. (Las contraseñas no se pueden ver: Supabase las guarda cifradas.)
+2. Para poner una contraseña nueva: en la fila del usuario → menú **⋯** → **Send password recovery**
+   (le llega un correo), o bien bórralo y créalo otra vez con **Add user → Create new user** +
+   **Auto Confirm User**.
+3. Si el correo no aparece en la lista, ese usuario **no existe**: créalo con el Paso 1.
+
+### "¿Olvidaste tu contraseña?" (desde el propio panel)
+Escribe el correo en el login y toca el enlace: llega un correo de Supabase con un enlace que abre
+el panel en **"Crea tu nueva contraseña"**. Para que ese enlace abra betotours.com (y no
+`localhost`), configura una sola vez en Supabase → **Authentication → URL Configuration**:
+- **Site URL:** `https://betotours.com`
+- **Redirect URLs → Add URL:** `https://betotours.com/**`
+
 ## Notas
 - Como ya no hay clave demo, **crea el usuario (Paso 1) antes o apenas se publique**
   el cambio, si no, nadie podrá entrar al panel.

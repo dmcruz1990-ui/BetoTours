@@ -9,6 +9,15 @@ const SUPABASE_ANON_KEY =
   (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2b2RteHFlaG95amZraXVscndmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjg3ODksImV4cCI6MjA5NTkwNDc4OX0.OOPmj5K_MP4kjjQshsbNZoBf1WNykLtBHugxl56WYrc';
 
+// Enlace de "recuperar contraseña": hay que leer el hash ANTES de crear el cliente,
+// porque Supabase lo consume y lo borra de la URL al iniciar.
+const initialHash = typeof window !== 'undefined' ? window.location.hash : '';
+export const IS_PASSWORD_RECOVERY = /type=recovery/.test(initialHash);
+export const AUTH_LINK_ERROR = (() => {
+  const m = initialHash.match(/error_description=([^&]+)/);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+})();
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export interface BlogPost {
