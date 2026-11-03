@@ -148,7 +148,7 @@ async function notificarReserva(res: Reserva) {
     ${filas([
       ...(ref ? [['N° de reserva', `<b>${esc(ref)}</b>`] as [string, string]] : []),
       ['Cliente', `<b>${nombre}</b>`],
-      ['WhatsApp', tel ? `<a href="https://wa.me/${tel}" style="color:#15803d;font-weight:bold">${esc(res.guest_phone)}</a>` : '—'],
+      ['WhatsApp', tel ? `<a href="https://wa.me/${tel}" style="color:#15803d;font-weight:bold">${esc(res.guest_phone)}</a>` : `<span style="color:#b45309">No vino en ${esAyenda ? 'el correo de Ayenda' : 'la reserva'}</span>`],
       ['Correo', res.guest_email ? `<a href="mailto:${esc(res.guest_email)}" style="color:#15803d">${esc(res.guest_email)}</a>` : '—'],
       ['Apartamento', `<b>${esc(apto)}</b>`],
       ['Entrada', esc(fmtDate(res.check_in))],
