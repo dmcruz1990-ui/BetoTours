@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { supabase, BlogPost, AvailabilityItem, Reservation, ReservationStatus, Apartment } from '../lib/supabase';
+import { supabase, BlogPost, AvailabilityItem, Reservation, ReservationStatus, Apartment, IS_PASSWORD_RECOVERY, AUTH_LINK_ERROR } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface AdminPanelProps {
@@ -30,13 +30,61 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // Recuperación de contraseña (enlace del correo de Supabase)
+  const [recovery, setRecovery] = useState(IS_PASSWORD_RECOVERY);
+  const [newPass, setNewPass] = useState('');
+  const [newPass2, setNewPass2] = useState('');
+  const [authOk, setAuthOk] = useState('');
+  useEffect(() => {
+    if (AUTH_LINK_ERROR) setAuthMsg(/expired|invalid/i.test(AUTH_LINK_ERROR)
+      ? 'El enlace del correo ya venció o ya se usó. Pide uno nuevo con "¿Olvidaste tu contraseña?".'
+      : `El enlace no funcionó: ${AUTH_LINK_ERROR}`);
+    const { data: sub } = supabase.auth.onAuthStateChange(ev => { if (ev === 'PASSWORD_RECOVERY') setRecovery(true); });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Traduce el error real de Supabase (antes todo salía como "contraseña incorrecta")
+  const explicarError = (err: { message?: string; code?: string; status?: number }) => {
+    const m = `${err.code || ''} ${err.message || ''}`.toLowerCase();
+    if (m.includes('invalid_credentials') || m.includes('invalid login')) return 'Correo o contraseña incorrectos. Si no la recuerdas, usa "¿Olvidaste tu contraseña?".';
+    if (m.includes('not_confirmed') || m.includes('not confirmed')) return 'Este usuario existe pero no está confirmado. En Supabase → Authentication → Users, ábrelo y confírmalo (o créalo de nuevo marcando "Auto Confirm User").';
+    if (m.includes('rate') || err.status === 429) return 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar.';
+    if (m.includes('banned')) return 'Este usuario está bloqueado en Supabase.';
+    if (m.includes('fetch') || m.includes('network')) return 'No hay conexión con el servidor. Revisa el internet e intenta de nuevo.';
+    return `No se pudo entrar: ${err.message || 'error desconocido'}`;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthMsg('');
+    setAuthMsg(''); setAuthOk('');
     setAuthLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) setAuthMsg('Correo o contraseña incorrectos.');
+    if (error) setAuthMsg(explicarError(error));
     setAuthLoading(false);
+  };
+
+  const handleForgot = async () => {
+    setAuthMsg(''); setAuthOk('');
+    const em = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { setAuthMsg('Escribe tu correo arriba y vuelve a tocar "¿Olvidaste tu contraseña?".'); return; }
+    setAuthLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: `${window.location.origin}/admin` });
+    setAuthLoading(false);
+    if (error) setAuthMsg(explicarError(error));
+    else setAuthOk(`Listo. Si ${em} es un usuario del panel, te llegó un correo con un enlace para crear una contraseña nueva (revisa Spam).`);
+  };
+
+  const handleNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthMsg('');
+    if (newPass.length < 8) { setAuthMsg('La contraseña debe tener al menos 8 caracteres.'); return; }
+    if (newPass !== newPass2) { setAuthMsg('Las dos contraseñas no coinciden.'); return; }
+    setAuthLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPass });
+    setAuthLoading(false);
+    if (error) { setAuthMsg(explicarError(error)); return; }
+    setRecovery(false); setNewPass(''); setNewPass2('');
+    window.history.replaceState(null, '', '/#/admin');
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); };
@@ -45,6 +93,34 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
 
   if (checking) {
     return <div className="text-center py-32 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-3xl"></i></div>;
+  }
+
+  // ---------- NUEVA CONTRASEÑA (llegó desde el enlace del correo) ----------
+  if (authed && recovery) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20">
+        <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center mx-auto mb-4">
+              <i className="fa-solid fa-key text-white text-2xl"></i>
+            </div>
+            <h1 className="text-2xl font-black text-gray-900">Crea tu nueva contraseña</h1>
+            <p className="text-gray-500 text-sm mt-1">{session?.user.email}</p>
+          </div>
+          <form onSubmit={handleNewPassword} className="space-y-4">
+            <input type="password" required placeholder="Nueva contraseña (mínimo 8)" value={newPass} onChange={e => setNewPass(e.target.value)} autoComplete="new-password"
+              className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
+            <input type="password" required placeholder="Repite la contraseña" value={newPass2} onChange={e => setNewPass2(e.target.value)} autoComplete="new-password"
+              className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
+            {authMsg && <p className="text-red-500 text-sm">{authMsg}</p>}
+            <button type="submit" disabled={authLoading}
+              className="w-full py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition disabled:opacity-50">
+              {authLoading ? 'Guardando…' : 'Guardar y entrar'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   // ---------- LOGIN ----------
@@ -65,9 +141,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ language }) => {
             <input type="password" required placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"
               className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none" />
             {authMsg && <p className="text-red-500 text-sm">{authMsg}</p>}
+            {authOk && <p className="text-green-700 text-sm bg-green-50 border border-green-200 rounded-xl p-3">{authOk}</p>}
             <button type="submit" disabled={authLoading}
               className="w-full py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition disabled:opacity-50">
-              {authLoading ? 'Entrando…' : 'Entrar'}
+              {authLoading ? 'Un momento…' : 'Entrar'}
+            </button>
+            <button type="button" onClick={handleForgot} disabled={authLoading}
+              className="w-full text-sm font-bold text-green-700 hover:text-green-800 disabled:opacity-50">
+              ¿Olvidaste tu contraseña?
             </button>
           </form>
         </div>
